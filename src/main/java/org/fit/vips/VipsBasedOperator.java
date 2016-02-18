@@ -1,6 +1,8 @@
 package org.fit.vips;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import org.fit.layout.impl.BaseOperator;
@@ -21,8 +23,8 @@ public class VipsBasedOperator extends BaseOperator
     protected final ValueType[] paramTypes = {};
 	
     protected List<VipsBasedVisualBlocksDTO> visualBlocksPool = new ArrayList<VipsBasedVisualBlocksDTO>();
+    protected List<VipsBasedSeparator> detectedSeparators = new ArrayList<VipsBasedSeparator>();
     private final int startLevel = 0;
-    private SeparatorSet separators = null;
 	
 	@Override
     public String getId()
@@ -72,27 +74,37 @@ public class VipsBasedOperator extends BaseOperator
     
     protected void performVipsAlgorithm(AreaImpl root)
     {
-        //first phase visual block extraction
+        //phase of visual block extraction
     	divideDomTree(root, startLevel);
     	
-    	//second phase visual separators detection
-    	separators = new VipsBasedSeparatorSet(root);
+    	//sort detected separators ascending by weight
+    	Collections.sort(detectedSeparators, new Comparator<VipsBasedSeparator>(){
+    		@Override
+    	    public int compare(VipsBasedSeparator sep1, VipsBasedSeparator sep2) {
+    	        return Integer.compare(sep1.getWeight(), sep2.getWeight());
+    	    }
+    	});
     	
-    	for (Separator separator : separators.getHorizontal()) {
-    		System.out.println("Horizontalni separator");
-		}
-    	for (Separator separator : separators.getVertical()) {
-    		System.out.println("Vertikalni separator");
+    	//phase of content structure construction
+    	for (VipsBasedSeparator separator : detectedSeparators) {
+			//System.out.println(separator.toString());
+    		
+    		
 		}
     }
     
     private void divideDomTree(AreaImpl root, int currentLevel)
     {
-    	if(dividable(root, currentLevel) && root.getChildCount() != 0) { //TODO:HERE delete AND statement later
+    	//collecting detected separators at actual tree level
+    	collectActualSeparators(root);
+    	
+    	if(dividable(root, currentLevel) && root.getChildCount() != 0) //divide this block //TODO:HERE delete AND statement later
+    	{ 
     		for (int i = 0; i < root.getChildCount(); i++)
     			divideDomTree((AreaImpl) root.getChildArea(i), currentLevel++);
     	}
-    	else { //is a visual block
+    	else //is a visual block
+    	{ 	
     		VipsBasedVisualBlocksDTO visualBlock = new VipsBasedVisualBlocksDTO();
     		
 			if(root.getBoxes() != null && root.getBoxes().size() != 0)
@@ -123,5 +135,24 @@ public class VipsBasedOperator extends BaseOperator
     	//TODO: apply heuristic rules to root
     	
     	return false;
+    }
+    
+    private void collectActualSeparators(AreaImpl root)
+    {
+    	VipsBasedSeparatorSet actualLevelSeparators = new VipsBasedSeparatorSet(root);
+    	VipsBasedSeparator vipsSeparator = null;
+    	
+    	for (Separator separator : actualLevelSeparators.getHorizontal())
+    	{
+    		//System.out.println("Horizontal separator");
+    		vipsSeparator = new VipsBasedSeparator(separator);
+    		detectedSeparators.add(vipsSeparator);
+		}
+    	for (Separator separator : actualLevelSeparators.getVertical())
+    	{
+    		//System.out.println("Vertical separator");
+    		vipsSeparator = new VipsBasedSeparator(separator);
+    		detectedSeparators.add(vipsSeparator);
+		}
     }
 }
