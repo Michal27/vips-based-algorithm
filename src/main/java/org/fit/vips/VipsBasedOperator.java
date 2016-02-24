@@ -85,11 +85,41 @@ public class VipsBasedOperator extends BaseOperator
     	    }
     	});
     	
+    	//TODO: filter separators which doesn't separate VisualBlocks
+    	
     	//phase of content structure construction
-    	for (VipsBasedSeparator separator : detectedSeparators) {
+    	VipsBasedSeparator actualSeparator = null;	
+    	while (detectedSeparators.size() != 0) {
 			//System.out.println(separator.toString());
     		
+    		actualSeparator = detectedSeparators.get(0);
     		
+    		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null)) //TODO: maybe joining other sibling separators
+    		{
+    			//TODO: the tree must be built from Areas without child Areas (reconstruction of the tree)
+    			
+    			//merge separator's visual blocks to new node
+    			AreaImpl newNode = new AreaImpl(0, 0, 0, 0);
+        		newNode.appendChild(actualSeparator.getArea1());
+        		newNode.appendChild(actualSeparator.getArea2());
+        		
+        		//TODO: implement possibility of more VisualBlocks are appended to newNode
+        		
+        		detectedSeparators.remove(0);
+        		
+        		//update adjacent areas of remaining separators
+        		for (VipsBasedSeparator separator : detectedSeparators)
+        		{
+        			if((separator.getArea1() == actualSeparator.getArea1()) || (separator.getArea1() == actualSeparator.getArea2()))
+        			{
+        				separator.setArea1(newNode);
+        			}
+        			else if ((separator.getArea2() == actualSeparator.getArea1()) || (separator.getArea2() == actualSeparator.getArea2()))
+        			{
+        				separator.setArea2(newNode);
+					}
+        		}
+    		}
 		}
     }
     
