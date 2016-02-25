@@ -77,33 +77,52 @@ public class VipsBasedOperator extends BaseOperator
         //phase of visual block extraction
     	divideDomTree(root, startLevel);
     	
-    	//sort detected separators ascending by weight
-    	Collections.sort(detectedSeparators, new Comparator<VipsBasedSeparator>(){
-    		@Override
-    	    public int compare(VipsBasedSeparator sep1, VipsBasedSeparator sep2) {
-    	        return Integer.compare(sep1.getWeight(), sep2.getWeight());
-    	    }
-    	});
+    	sortSeparatorsAscending();
     	
-    	//TODO: filter separators which doesn't separate VisualBlocks
+    	filterNonVisualSeparators();
     	
     	//phase of content structure construction
     	VipsBasedSeparator actualSeparator = null;	
-    	while (detectedSeparators.size() != 0) {
+    	while (detectedSeparators.size() != 0)
+    	{
 			//System.out.println(separator.toString());
     		
     		actualSeparator = detectedSeparators.get(0);
     		
     		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null)) //TODO: maybe joining other sibling separators
     		{
-    			//TODO: the tree must be built from Areas without child Areas (reconstruction of the tree)
-    			
     			//merge separator's visual blocks to new node
     			AreaImpl newNode = new AreaImpl(0, 0, 0, 0);
         		newNode.appendChild(actualSeparator.getArea1());
         		newNode.appendChild(actualSeparator.getArea2());
         		
-        		//TODO: implement possibility of more VisualBlocks are appended to newNode
+        		if(detectedSeparators.size() == 1)
+        		{
+        			root = newNode;
+        			break;
+        		}
+        		
+        		//for-each separator with same weight
+        		for (VipsBasedSeparator sameWeightSeparator : detectedSeparators)
+        		{
+					if(sameWeightSeparator.getWeight() != actualSeparator.getWeight())
+						break;
+					
+					//for-each child of newNode
+					for (Area child : newNode.getChildAreas())
+					{
+						if((sameWeightSeparator.getArea1() == child) && (sameWeightSeparator.getArea2() != child))
+						{
+							newNode.appendChild(sameWeightSeparator.getArea2());
+							detectedSeparators.remove(sameWeightSeparator);
+						}
+						else if ((sameWeightSeparator.getArea2() == child) && (sameWeightSeparator.getArea1() != child))
+						{
+							newNode.appendChild(sameWeightSeparator.getArea1());
+							detectedSeparators.remove(sameWeightSeparator);
+						}	
+					}
+				}
         		
         		detectedSeparators.remove(0);
         		
@@ -121,6 +140,8 @@ public class VipsBasedOperator extends BaseOperator
         		}
     		}
 		}
+    	
+    	processLeafNodes(root);
     }
     
     private void divideDomTree(AreaImpl root, int currentLevel)
@@ -184,5 +205,84 @@ public class VipsBasedOperator extends BaseOperator
     		vipsSeparator = new VipsBasedSeparator(separator);
     		detectedSeparators.add(vipsSeparator);
 		}
+    }
+    
+    /**
+     * Sort detected separators ascending by weight
+     */
+    private void sortSeparatorsAscending()
+    {
+    	Collections.sort(detectedSeparators, new Comparator<VipsBasedSeparator>(){
+    		@Override
+    	    public int compare(VipsBasedSeparator sep1, VipsBasedSeparator sep2) {
+    	        return Integer.compare(sep1.getWeight(), sep2.getWeight());
+    	    }
+    	});
+    }
+    
+    /**
+     * Check every detected separator if it separates only visual blocks
+     */
+    private void filterNonVisualSeparators()
+    {
+    	boolean isArea1Visual;
+    	boolean isArea2Visual;
+    	
+    	for (VipsBasedSeparator separator : detectedSeparators)
+    	{
+    		isArea1Visual = false;
+    		isArea2Visual = false;
+			for (VipsBasedVisualBlocksDTO visualBlock : visualBlocksPool)
+			{
+				if(separator.getArea1() == visualBlock.getArea())
+					isArea1Visual = true;
+				else if (separator.getArea2() == visualBlock.getArea())
+					isArea2Visual = true;
+				
+				if(isArea1Visual && isArea2Visual)
+					break;
+			}
+			
+			if(isArea1Visual && isArea2Visual)
+			{
+				//prepare separator for tree reconstruction process
+				removeAreasChildNodes(separator);
+			}
+			else
+				detectedSeparators.remove(separator);
+		}
+    }
+    
+    private void removeAreasChildNodes(VipsBasedSeparator separator)
+    {
+    	AreaImpl area1 = separator.getArea1();
+    	AreaImpl area2 = separator.getArea2();
+    	area1.removeAllChildren();
+    	area2.removeAllChildren();
+    	separator.setArea1(area1);
+    	separator.setArea2(area2);
+    }
+    
+    private AreaImpl processLeafNodes(AreaImpl root)
+    {
+    	if(root.getChildCount() != 0)
+    	{
+    		for (int i = 0; i < root.getChildCount(); i++)
+    			processLeafNodes((AreaImpl) root.getChildArea(i));
+    	}
+    	else
+    	{
+			for (VipsBasedVisualBlocksDTO visualBlock : visualBlocksPool)
+			{
+				if(root == visualBlock.getArea())
+				{
+					if(visualBlock.getDoc() < 42)//TODO: Define the PDoC value here instead of 42
+						divideDomTree(root, 0);
+					break;
+				}
+			}
+		}
+    	
+    	return root;
     }
 }
