@@ -10,21 +10,33 @@ import org.fit.layout.model.Area;
 import org.fit.layout.model.AreaTree;
 import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.Separator;
-import org.fit.segm.grouping.op.SeparatorSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class VipsBasedOperator extends BaseOperator
 {
 	private static Logger log = LoggerFactory.getLogger(VipsBasedOperator.class);
-	//protected final String[] paramNames = { "useConsistentStyle", "maxLineEmSpace" };
-    //protected final ValueType[] paramTypes = { ValueType.BOOLEAN, ValueType.FLOAT };
-	protected final String[] paramNames = {};
-    protected final ValueType[] paramTypes = {};
+    
+    /** The maximal distance of two areas allowed within a single line (in 'em' units) */
+    protected float pdocValue;
+    protected static final int maxPdocValue = 1;
+    
+	protected final String[] paramNames = { "pdocValue" };
+    protected final ValueType[] paramTypes = { ValueType.FLOAT };
 	
     protected List<VipsBasedVisualBlocksDTO> visualBlocksPool = new ArrayList<VipsBasedVisualBlocksDTO>();
     protected List<VipsBasedSeparator> detectedSeparators = new ArrayList<VipsBasedSeparator>();
-    private final int startLevel = 0;
+    private static final int startLevel = 0;
+    
+    public VipsBasedOperator()
+    {
+    	pdocValue = maxPdocValue;
+    }
+    
+    public VipsBasedOperator(float pdocValue)
+    {
+        this.pdocValue = pdocValue;
+    }
 	
 	@Override
     public String getId()
@@ -225,10 +237,12 @@ public class VipsBasedOperator extends BaseOperator
      */
     private void filterNonVisualSeparators()
     {
-    	boolean isArea1Visual;
-    	boolean isArea2Visual;
+    	//make a copy of detectedSeparators
+    	ArrayList<VipsBasedSeparator> separators = new ArrayList<VipsBasedSeparator>(detectedSeparators);
     	
-    	for (VipsBasedSeparator separator : detectedSeparators)
+    	boolean isArea1Visual;
+    	boolean isArea2Visual;	
+    	for (VipsBasedSeparator separator : separators)
     	{
     		isArea1Visual = false;
     		isArea2Visual = false;
@@ -246,7 +260,7 @@ public class VipsBasedOperator extends BaseOperator
 			if(isArea1Visual && isArea2Visual)
 			{
 				//prepare separator for tree reconstruction process
-				removeAreasChildNodes(separator);
+				removeAreasChildNodes(detectedSeparators.get(detectedSeparators.indexOf(separator)));
 			}
 			else
 				detectedSeparators.remove(separator);
@@ -276,7 +290,7 @@ public class VipsBasedOperator extends BaseOperator
 			{
 				if(root == visualBlock.getArea())
 				{
-					if(visualBlock.getDoc() < 42)//TODO: Define the PDoC value here instead of 42
+					if(visualBlock.getDoc() < pdocValue)
 						divideDomTree(root, 0);
 					break;
 				}
