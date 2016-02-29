@@ -3,7 +3,7 @@ package org.fit.vips;
 import org.fit.layout.model.Box;
 import org.fit.segm.grouping.AreaImpl;
 
-public class VipsBasedVisualBlocksDTO {
+public class VipsBasedVisualBlock {
 	
 	private Box block;
 	private AreaImpl area;

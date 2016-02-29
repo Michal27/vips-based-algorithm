@@ -8,6 +8,7 @@ import java.util.List;
 import org.fit.layout.impl.BaseOperator;
 import org.fit.layout.model.Area;
 import org.fit.layout.model.AreaTree;
+import org.fit.layout.model.Box;
 import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.Separator;
 import org.slf4j.Logger;
@@ -24,9 +25,11 @@ public class VipsBasedOperator extends BaseOperator
 	protected final String[] paramNames = { "pdocValue" };
     protected final ValueType[] paramTypes = { ValueType.FLOAT };
 	
-    protected List<VipsBasedVisualBlocksDTO> visualBlocksPool = new ArrayList<VipsBasedVisualBlocksDTO>();
+    protected List<VipsBasedVisualBlock> visualBlocksPool = new ArrayList<VipsBasedVisualBlock>();
     protected List<VipsBasedSeparator> detectedSeparators = new ArrayList<VipsBasedSeparator>();
     private static final int startLevel = 0;
+    private boolean docValueIsKnown = false;
+    private float docValue = 0;
     
     public VipsBasedOperator()
     {
@@ -168,7 +171,7 @@ public class VipsBasedOperator extends BaseOperator
     	}
     	else //is a visual block
     	{ 	
-    		VipsBasedVisualBlocksDTO visualBlock = new VipsBasedVisualBlocksDTO();
+    		VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
     		
 			if(root.getBoxes() != null && root.getBoxes().size() != 0)
 				visualBlock.setBlock(root.getBoxes().firstElement());
@@ -196,8 +199,143 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isVisualBlock(AreaImpl root)
     {
     	//TODO: apply heuristic rules to root
+    	if(isMetVipsRule1(root))
+    		return false;
+    	
     	
     	return false;
+    }
+    
+    private boolean isMetVipsRule1(AreaImpl root)
+    {
+    	/*	If the DOM node is not a text node and it has no valid children, then this node cannot be divided and will be cut. */
+			 
+    	Box box = root.getBoxes().get(0);
+    	
+    	//if the DOM node is not a text node
+    	if(box.getType() != Box.Type.TEXT_CONTENT)
+    	{
+    		boolean noValidChild = true;
+    		
+    		//and it has no valid children
+			for (Area child : root.getChildAreas())
+    		{
+				if(child.getBoxes().get(0).isVisible())//TODO: is method isVisible enough for testing Valid node? How does this method work?
+				{
+					noValidChild = false;
+					break;
+				}
+			}
+    		
+    		return noValidChild;
+    	}
+    	else
+    		return false;
+    }
+    
+    private boolean isMetVipsRule2(AreaImpl root)
+    {	
+    	/* If the DOM node has only one valid child and the child is not a text node, then divide this node. */
+    	
+    	//has only one child
+    	if(root.getChildCount() == 1)
+    	{
+    		Box childNode = root.getChildArea(0).getBoxes().get(0);
+    		
+    		//the child is Valid
+    		if(childNode.isVisible()) 
+    			//the child is not a text node
+    			if(childNode.getType() != Box.Type.TEXT_CONTENT)
+    				return true;
+    	}	
+		return false;
+    }
+    
+    //TODO: is this rule really needed? Is it possible to know root node of some block? Isn't it a nonsense?
+    private boolean isMetVipsRule3(AreaImpl root)
+    {
+    	/*	
+    	 	If the DOM node is the root node of the sub-DOM tree (corresponding to the block),
+    		and there is only one sub DOM tree corresponding to this block, divide this node.
+    	 */
+    	return false;
+    }
+    
+    private boolean isMetVipsRule4(AreaImpl root)
+    {	
+    	/* 	
+			If all of the child nodes of the DOM node are text nodes or virtual text nodes, do not divide the node.  
+			If the font size and font weight of all these child nodes are same, set the DoC of the extracted block to 1. 
+			Otherwise, set the DoC of this extracted block to 0.9.
+		*/
+    	
+    	float previousNodeWeight = 0;
+    	float previousNodeSize = 0;
+    	docValue = 0.9f;
+    	
+    	for (Area child : root.getChildAreas())
+    	{
+			if(child.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT) //if child node isn't a text node
+			{
+				for (Area virtualNodeChild : child.getChildAreas())
+				{
+					if(virtualNodeChild.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT) //if child node isn't even a virtual text node
+						return false;
+				}
+			}
+			
+			//font size and font weight comparison
+			if(child == root.getChildAreas().get(0))
+			{
+				previousNodeWeight = child.getFontWeight();
+				previousNodeSize = child.getFontSize();
+			}
+			else
+			{
+				if(Float.compare(previousNodeWeight, child.getFontWeight()) != 0)
+					if(Float.compare(previousNodeSize, child.getFontSize()) != 0)
+						docValue = 1f;
+			}
+		}
+    	
+    	docValueIsKnown = true;
+    	return true;
+    }
+    
+    private boolean isMetVipsRule5(AreaImpl root)
+    {
+    	/*	
+    	 	If one of the child nodes of the DOM node is line-break node, then divide this DOM node.
+    	 */
+    	
+    	for (Area child : root.getChildAreas())
+    	{
+    		if(isLineBreakNode(child))
+    			return true;
+		}
+    	
+    	return false;
+    }
+    
+    private boolean isLineBreakNode(Area root)
+    {
+    	String tagName = root.getBoxes().get(0).getTagName();
+    	
+    	//if the node isn't a inline element
+    	if(	
+    		!tagName.equals("b") && !tagName.equals("big") && !tagName.equals("i") && !tagName.equals("small") && 
+    		!tagName.equals("tt") && !tagName.equals("abbr") && !tagName.equals("acronym") && !tagName.equals("cite") &&
+    		!tagName.equals("code") && !tagName.equals("dfn") && !tagName.equals("em") && !tagName.equals("kbd") &&
+    		!tagName.equals("strong") && !tagName.equals("samp") && !tagName.equals("time") && !tagName.equals("var") &&
+    		!tagName.equals("a") && !tagName.equals("bdo") && !tagName.equals("br") && !tagName.equals("img") &&
+    		!tagName.equals("map") && !tagName.equals("object") && !tagName.equals("q") && !tagName.equals("script") &&
+    		!tagName.equals("span") && !tagName.equals("sub") && !tagName.equals("sup") && !tagName.equals("button") &&
+    		!tagName.equals("input") && !tagName.equals("label") && !tagName.equals("select") && !tagName.equals("textarea") &&
+    		!tagName.equals("u") && !tagName.equals("font")
+    	)
+    		return true;
+    	else
+			return false;
     }
     
     private void collectActualSeparators(AreaImpl root)
@@ -246,7 +384,7 @@ public class VipsBasedOperator extends BaseOperator
     	{
     		isArea1Visual = false;
     		isArea2Visual = false;
-			for (VipsBasedVisualBlocksDTO visualBlock : visualBlocksPool)
+			for (VipsBasedVisualBlock visualBlock : visualBlocksPool)
 			{
 				if(separator.getArea1() == visualBlock.getArea())
 					isArea1Visual = true;
@@ -286,7 +424,7 @@ public class VipsBasedOperator extends BaseOperator
     	}
     	else
     	{
-			for (VipsBasedVisualBlocksDTO visualBlock : visualBlocksPool)
+			for (VipsBasedVisualBlock visualBlock : visualBlocksPool)
 			{
 				if(root == visualBlock.getArea())
 				{
