@@ -28,6 +28,7 @@ public class VipsBasedOperator extends BaseOperator
     protected List<VipsBasedVisualBlock> visualBlocksPool = new ArrayList<VipsBasedVisualBlock>();
     protected List<VipsBasedSeparator> detectedSeparators = new ArrayList<VipsBasedSeparator>();
     private static final int startLevel = 0;
+    private boolean isNonValidNode = false;
     private boolean docValueIsKnown = false;
     private float docValue = 0;
     
@@ -100,7 +101,7 @@ public class VipsBasedOperator extends BaseOperator
     	VipsBasedSeparator actualSeparator = null;	
     	while (detectedSeparators.size() != 0)
     	{
-			//System.out.println(separator.toString());
+			System.out.println(detectedSeparators.size());
     		
     		actualSeparator = detectedSeparators.get(0);
     		
@@ -118,7 +119,7 @@ public class VipsBasedOperator extends BaseOperator
         		}
         		
         		//for-each separator with same weight
-        		for (VipsBasedSeparator sameWeightSeparator : detectedSeparators)
+        		/*for (VipsBasedSeparator sameWeightSeparator : detectedSeparators) //TODO: FIX THIS
         		{
 					if(sameWeightSeparator.getWeight() != actualSeparator.getWeight())
 						break;
@@ -137,7 +138,7 @@ public class VipsBasedOperator extends BaseOperator
 							detectedSeparators.remove(sameWeightSeparator);
 						}	
 					}
-				}
+				}*/
         		
         		detectedSeparators.remove(0);
         		
@@ -164,27 +165,42 @@ public class VipsBasedOperator extends BaseOperator
     	//collecting detected separators at actual tree level
     	collectActualSeparators(root);
     	
-    	if(dividable(root, currentLevel) && root.getChildCount() != 0) //divide this block //TODO:HERE delete AND statement later
+    	if(dividable(root, currentLevel)) //divide this block
     	{ 
     		for (int i = 0; i < root.getChildCount(); i++)
+    		{
+    			reconfigureSeparators(root);
     			divideDomTree((AreaImpl) root.getChildArea(i), currentLevel++);
+    		}
     	}
     	else //is a visual block
     	{ 	
-    		VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
-    		
-			if(root.getBoxes() != null && root.getBoxes().size() != 0)
-				visualBlock.setBlock(root.getBoxes().firstElement());
-			else
-				visualBlock.setBlock(null);
-			visualBlock.setArea(root);
-			visualBlock.setDoc(0); //TODO: DoC evaluation of visualBlock
-			
-			visualBlocksPool.add(visualBlock); //add visual block to pool
-			
-			/*if(visualBlock.getBlock() != null)
-				System.out.println(visualBlock.getBlock().getTagName());*/
-			//System.out.println(visualBlock.getVisualBlockArea().getBoxText());
+    		//if(!isNonValidNode)
+    		{
+    			VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
+        		
+    			if(root.getBoxes() != null && root.getBoxes().size() != 0)
+    				visualBlock.setBlock(root.getBoxes().firstElement());
+    			else
+    				visualBlock.setBlock(null);
+    			visualBlock.setArea(root);
+    			
+    			if(docValueIsKnown)
+    			{
+    				visualBlock.setDoc(docValue);
+    				docValueIsKnown = false;
+    			}
+    			else
+    				visualBlock.setDoc(0); //TODO: DoC evaluation of visualBlock
+    			
+    			visualBlocksPool.add(visualBlock); //add visual block to pool
+    			
+    			isNonValidNode = false;
+    			
+    			/*if(visualBlock.getBlock() != null)
+    				System.out.println(visualBlock.getBlock().getTagName());*/
+    			//System.out.println(visualBlock.getVisualBlockArea().getBoxText());
+    		}
 		}
     }
     
@@ -200,10 +216,28 @@ public class VipsBasedOperator extends BaseOperator
     {
     	//TODO: apply heuristic rules to root
     	if(isMetVipsRule1(root))
+    	{
+    		isNonValidNode = true;
+    		return true;
+    	}
+    	else if(isMetVipsRule2(root))
+    	{
     		return false;
-    	
-    	
-    	return false;
+    	}
+    	else if (isMetVipsRule3(root))
+    	{
+			return false;
+		}
+    	else if (isMetVipsRule4(root))
+    	{
+			return true;
+		}
+    	else if (isMetVipsRule5(root))
+    	{
+    		return false;
+		}
+    	else//TODO: this is just for testing
+    		return false;
     }
     
     private boolean isMetVipsRule1(AreaImpl root)
@@ -322,7 +356,7 @@ public class VipsBasedOperator extends BaseOperator
     	String tagName = root.getBoxes().get(0).getTagName();
     	
     	//if the node isn't a inline element
-    	if(	
+    	if(	//TODO: are these tag names correctly formated?
     		!tagName.equals("b") && !tagName.equals("big") && !tagName.equals("i") && !tagName.equals("small") && 
     		!tagName.equals("tt") && !tagName.equals("abbr") && !tagName.equals("acronym") && !tagName.equals("cite") &&
     		!tagName.equals("code") && !tagName.equals("dfn") && !tagName.equals("em") && !tagName.equals("kbd") &&
@@ -347,12 +381,16 @@ public class VipsBasedOperator extends BaseOperator
     	{
     		//System.out.println("Horizontal separator");
     		vipsSeparator = new VipsBasedSeparator(separator);
+    		vipsSeparator.setArea1(separator.getArea1()); //TODO: Possibly delete Area setters lately
+    		vipsSeparator.setArea2(separator.getArea2());
     		detectedSeparators.add(vipsSeparator);
 		}
     	for (Separator separator : actualLevelSeparators.getVertical())
     	{
     		//System.out.println("Vertical separator");
     		vipsSeparator = new VipsBasedSeparator(separator);
+    		vipsSeparator.setArea1(separator.getArea1());
+    		vipsSeparator.setArea2(separator.getArea2());
     		detectedSeparators.add(vipsSeparator);
 		}
     }
@@ -375,6 +413,19 @@ public class VipsBasedOperator extends BaseOperator
      */
     private void filterNonVisualSeparators()
     {
+    	for (VipsBasedSeparator separator : detectedSeparators) {
+    		System.out.println(separator.toString());
+    		
+    		System.out.println("SeparatorArea_BEGIN");
+    		if(separator.getArea1() != null)
+    			System.out.println(separator.getArea1().toString());
+    		if(separator.getArea2() != null)
+    			System.out.println(separator.getArea2().toString());
+    		System.out.println("SeparatorArea_END");
+		}
+    	for (VipsBasedVisualBlock block : visualBlocksPool) {
+    		System.out.println(block.getArea().toString());
+		}
     	//make a copy of detectedSeparators
     	ArrayList<VipsBasedSeparator> separators = new ArrayList<VipsBasedSeparator>(detectedSeparators);
     	
@@ -402,6 +453,10 @@ public class VipsBasedOperator extends BaseOperator
 			}
 			else
 				detectedSeparators.remove(separator);
+		}
+    	System.out.println(detectedSeparators.size());
+    	for (VipsBasedSeparator vipsBasedSeparator : detectedSeparators) {
+    		System.out.println(vipsBasedSeparator.toString());
 		}
     }
     
@@ -436,5 +491,48 @@ public class VipsBasedOperator extends BaseOperator
 		}
     	
     	return root;
+    }
+    
+    private void reconfigureSeparators(AreaImpl root)
+    {
+    	List<VipsBasedSeparator> associatedSeparators = getAssociatedSeparators(root);
+    	
+    	for (VipsBasedSeparator actualSeparator : associatedSeparators)
+    	{
+    		//System.out.println(actualSeparator.toString());
+			
+    		for (Area child : root.getChildAreas())
+			{
+				//System.out.println(child.toString());
+
+				if(actualSeparator.getType() == Separator.HORIZONTAL)
+				{
+					if(Math.abs(actualSeparator.getY1() - child.getY2()) < 2)
+						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea1((AreaImpl)child);
+					else if(Math.abs(actualSeparator.getY2() - child.getY1()) < 2)
+						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea2((AreaImpl)child);
+				}
+				else if(actualSeparator.getType() == Separator.VERTICAL)
+				{
+					if(Math.abs(actualSeparator.getX1() - child.getX2()) < 2)
+						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea1((AreaImpl)child);
+					else if(Math.abs(actualSeparator.getX2() - child.getX1()) < 2)
+						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea2((AreaImpl)child);
+				}
+			}
+		}
+    }
+    
+    private List<VipsBasedSeparator> getAssociatedSeparators(AreaImpl node)
+    {
+    	List<VipsBasedSeparator> result = new ArrayList<VipsBasedSeparator>();
+    	
+    	for (VipsBasedSeparator separator : detectedSeparators)
+    	{
+			if((separator.getArea1() == node) || (separator.getArea2() == node))
+				result.add(separator);
+		}
+    	
+    	return result;
     }
 }

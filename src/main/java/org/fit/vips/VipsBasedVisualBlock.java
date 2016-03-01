@@ -7,7 +7,7 @@ public class VipsBasedVisualBlock {
 	
 	private Box block;
 	private AreaImpl area;
-	private int doc;
+	private float doc;
 	
 	public void setBlock(Box visualBlock) {
 		this.block = visualBlock;
@@ -25,11 +25,11 @@ public class VipsBasedVisualBlock {
 		return area;
 	}
 	
-	public void setDoc(int doc) {
+	public void setDoc(float doc) {
 		this.doc = doc;
 	}
 	
-	public int getDoc() {
+	public float getDoc() {
 		return doc;
 	}
 }
