@@ -18,7 +18,6 @@ public class VipsBasedOperator extends BaseOperator
 {
 	private static Logger log = LoggerFactory.getLogger(VipsBasedOperator.class);
     
-    /** The maximal distance of two areas allowed within a single line (in 'em' units) */
     protected float pdocValue;
     protected static final int maxPdocValue = 1;
     
@@ -31,6 +30,7 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isNotValidNode = false;
     private boolean docValueIsKnown = false;
     private float docValue = 0;
+    private AreaTree defaultAreaTree = null;
     
     public VipsBasedOperator()
     {
@@ -77,12 +77,20 @@ public class VipsBasedOperator extends BaseOperator
     @Override
     public void apply(AreaTree atree)
     {
+    	defaultAreaTree = atree;
         performVipsAlgorithm((AreaImpl) atree.getRoot());
     }
 
     @Override
     public void apply(AreaTree atree, Area root)
-    {
+    {	
+    	System.out.println("Leaf Node In Progress: " + root.toString());
+    	for (Area child : root.getChildAreas())
+		{
+			System.out.println(child.toString());
+		}
+    	
+    	defaultAreaTree = atree;
     	performVipsAlgorithm((AreaImpl) root);
     }
     
@@ -116,7 +124,7 @@ public class VipsBasedOperator extends BaseOperator
         		
         		List<VipsBasedSeparator> detectedSeparatorsCopy = new ArrayList<VipsBasedSeparator>(detectedSeparators);
         		//for-each separator with same weight
-        		while(detectedSeparatorsCopy.size() != 0)
+        		while(detectedSeparatorsCopy.size() != 0)//TODO: BEGIN here: if more than two nodes are merged into a new node, for sameWeightSeparator are't updated adjacent areas of remaining separators.
         		{
         			VipsBasedSeparator sameWeightSeparator = detectedSeparatorsCopy.get(0);
         			
@@ -187,7 +195,9 @@ public class VipsBasedOperator extends BaseOperator
     				visualBlock.setBlock(root.getBoxes().firstElement());
     			else
     				visualBlock.setBlock(null);
+    			
     			visualBlock.setArea(root);
+    			visualBlock.setDomNode(root);
     			
     			if(docValueIsKnown)
     			{
@@ -195,15 +205,12 @@ public class VipsBasedOperator extends BaseOperator
     				docValueIsKnown = false;
     			}
     			else
-    				visualBlock.setDoc(0); //TODO: DoC evaluation of visualBlock
+    				visualBlock.setDoc(0f); //TODO: DoC evaluation of visualBlock
     			
     			visualBlocksPool.add(visualBlock); //add visual block to pool
-    			
-    			/*if(visualBlock.getBlock() != null)
-    				System.out.println(visualBlock.getBlock().getTagName());*/
-    			//System.out.println(visualBlock.getVisualBlockArea().getBoxText());
     		}
-    		isNotValidNode = false;
+    		else
+    			isNotValidNode = false;
 		}
     }
     
@@ -459,7 +466,7 @@ public class VipsBasedOperator extends BaseOperator
 		}*/
     }
     
-    private void removeAreasChildNodes(VipsBasedSeparator separator)//TODO: Here is a good point to start work ... the children schouldn't be fully deleted from ROOT AreaImpl
+    private void removeAreasChildNodes(VipsBasedSeparator separator)
     {
     	AreaImpl area1 = separator.getArea1();
     	AreaImpl area2 = separator.getArea2();
@@ -473,17 +480,30 @@ public class VipsBasedOperator extends BaseOperator
     {
     	if(root.getChildCount() != 0)
     	{
+    		System.out.println("This is NOT Leaf node:" + root.toString());
     		for (int i = 0; i < root.getChildCount(); i++)
     			processLeafNodes((AreaImpl) root.getChildArea(i));
     	}
     	else
     	{
+    		System.out.println("This is Leaf node:" + root.toString());
 			for (VipsBasedVisualBlock visualBlock : visualBlocksPool)
 			{
 				if(root == visualBlock.getArea())
 				{
-					if(visualBlock.getDoc() < pdocValue)
-						divideDomTree(root, 0);
+					/*System.out.println("DoC: " + visualBlock.getDoc());
+					System.out.println("PDoC: " + pdocValue);*/
+					
+					if(Float.compare(visualBlock.getDoc(), pdocValue) < 0)
+					{
+						for (Area child : visualBlock.getDomNode().getChildAreas())
+						{
+							root.appendChild(child);
+						}
+						
+						/*VipsBasedOperator divideDomTree = new VipsBasedOperator(pdocValue);
+						divideDomTree.apply(defaultAreaTree, root);*/
+					}
 					break;
 				}
 			}
