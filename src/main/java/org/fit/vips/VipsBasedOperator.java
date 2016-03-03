@@ -9,10 +9,13 @@ import org.fit.layout.impl.BaseOperator;
 import org.fit.layout.model.Area;
 import org.fit.layout.model.AreaTree;
 import org.fit.layout.model.Box;
+import org.fit.layout.model.Rectangular;
 import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.Separator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.bigdata.journal.RootBlockCommitter;
 
 public class VipsBasedOperator extends BaseOperator
 {
@@ -79,16 +82,17 @@ public class VipsBasedOperator extends BaseOperator
     {
     	defaultAreaTree = atree;
         performVipsAlgorithm((AreaImpl) atree.getRoot());
+        
     }
 
     @Override
     public void apply(AreaTree atree, Area root)
     {	
-    	System.out.println("Leaf Node In Progress: " + root.toString());
+    	/*System.out.println("Leaf Node In Progress: " + root.toString());
     	for (Area child : root.getChildAreas())
 		{
 			System.out.println(child.toString());
-		}
+		}*/
     	
     	defaultAreaTree = atree;
     	performVipsAlgorithm((AreaImpl) root);
@@ -106,7 +110,8 @@ public class VipsBasedOperator extends BaseOperator
     	filterNonVisualSeparators();
     	
     	//phase of content structure construction
-    	VipsBasedSeparator actualSeparator = null;	
+    	VipsBasedSeparator actualSeparator = null;
+    	AreaImpl newNode = null;
     	while (detectedSeparators.size() != 0)
     	{
 			//System.out.println(detectedSeparators.size());
@@ -116,15 +121,16 @@ public class VipsBasedOperator extends BaseOperator
     		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null)) //TODO: maybe joining other sibling separators
     		{
     			//merge separator's visual blocks to new node
-    			AreaImpl newNode = new AreaImpl(0, 0, 0, 0);
+    			newNode = new AreaImpl(0, 0, 0, 0);
         		newNode.appendChild(actualSeparator.getArea1());
         		newNode.appendChild(actualSeparator.getArea2());
         		
-        		root = newNode;
+        		if(detectedSeparators.size() != 0)
+        			detectedSeparators.remove(0);
         		
         		List<VipsBasedSeparator> detectedSeparatorsCopy = new ArrayList<VipsBasedSeparator>(detectedSeparators);
         		//for-each separator with same weight
-        		while(detectedSeparatorsCopy.size() != 0)//TODO: BEGIN here: if more than two nodes are merged into a new node, for sameWeightSeparator are't updated adjacent areas of remaining separators.
+        		while(detectedSeparatorsCopy.size() != 0)
         		{
         			VipsBasedSeparator sameWeightSeparator = detectedSeparatorsCopy.get(0);
         			
@@ -134,15 +140,15 @@ public class VipsBasedOperator extends BaseOperator
 					//for-each child of newNode
 					for (Area child : newNode.getChildAreas())
 					{
-						if((detectedSeparators.get(detectedSeparators.indexOf(sameWeightSeparator)).getArea1() == child) && (detectedSeparators.get(detectedSeparators.indexOf(sameWeightSeparator)).getArea2() != child))
+						if((sameWeightSeparator.getArea1() == child) && (sameWeightSeparator.getArea2() != child))
 						{
-							newNode.appendChild(detectedSeparators.get(detectedSeparators.indexOf(sameWeightSeparator)).getArea2());
+							newNode.appendChild(sameWeightSeparator.getArea2());
 							detectedSeparators.remove(sameWeightSeparator);
 							break;
 						}
-						else if ((detectedSeparators.get(detectedSeparators.indexOf(sameWeightSeparator)).getArea2() == child) && (detectedSeparators.get(detectedSeparators.indexOf(sameWeightSeparator)).getArea1() != child))
+						else if ((sameWeightSeparator.getArea2() == child) && (sameWeightSeparator.getArea1() != child))
 						{
-							newNode.appendChild(detectedSeparators.get(detectedSeparators.indexOf(sameWeightSeparator)).getArea1());
+							newNode.appendChild(sameWeightSeparator.getArea1());
 							detectedSeparators.remove(sameWeightSeparator);
 							break;
 						}	
@@ -151,23 +157,55 @@ public class VipsBasedOperator extends BaseOperator
 					detectedSeparatorsCopy.remove(0);
 				}
         		
-        		if(detectedSeparators.size() != 0)
-        			detectedSeparators.remove(0);
+        		//update bounds of the newNode
+        		for (int i = 0; i < newNode.getChildCount(); i++)
+        		{
+        			Area child = newNode.getChildArea(i);
+        			Rectangular bounds = newNode.getBounds();
+        			
+					if(i == 0)
+					{
+						bounds.setX1(child.getX1());
+						bounds.setY1(child.getY1());
+						newNode.setBounds(bounds);
+					}
+					else
+					{
+						if(child.getX1() < bounds.getX1())
+						{
+							bounds.setX1(child.getX1());
+							newNode.setBounds(bounds);
+						}
+						if(child.getY1() < bounds.getY1())
+						{
+							bounds.setX1(child.getX1());
+							newNode.setBounds(bounds);
+						}
+					}
+				}
         		
         		//update adjacent areas of remaining separators
         		for (VipsBasedSeparator separator : detectedSeparators)
         		{
-        			if((separator.getArea1() == actualSeparator.getArea1()) || (separator.getArea1() == actualSeparator.getArea2()))
+        			for (Area child : newNode.getChildAreas())
         			{
-        				separator.setArea1(newNode);
-        			}
-        			else if ((separator.getArea2() == actualSeparator.getArea1()) || (separator.getArea2() == actualSeparator.getArea2()))
-        			{
-        				separator.setArea2(newNode);
+        				if(separator.getArea1() == child)
+            			{
+            				separator.setArea1(newNode);
+            			}
+            			else if (separator.getArea2() == child)
+            			{
+            				separator.setArea2(newNode);
+    					}
 					}
         		}
     		}
 		}
+    	
+    	//refer actual tree to output
+    	root.removeAllChildren();
+    	if(newNode != null)
+    		root.appendChild(newNode);
     	
     	processLeafNodes(root);
     }
@@ -490,10 +528,7 @@ public class VipsBasedOperator extends BaseOperator
 			for (VipsBasedVisualBlock visualBlock : visualBlocksPool)
 			{
 				if(root == visualBlock.getArea())
-				{
-					/*System.out.println("DoC: " + visualBlock.getDoc());
-					System.out.println("PDoC: " + pdocValue);*/
-					
+				{				
 					if(Float.compare(visualBlock.getDoc(), pdocValue) < 0)
 					{
 						for (Area child : visualBlock.getDomNode().getChildAreas())
@@ -501,8 +536,8 @@ public class VipsBasedOperator extends BaseOperator
 							root.appendChild(child);
 						}
 						
-						/*VipsBasedOperator divideDomTree = new VipsBasedOperator(pdocValue);
-						divideDomTree.apply(defaultAreaTree, root);*/
+						VipsBasedOperator divideDomTree = new VipsBasedOperator(pdocValue);
+						divideDomTree.apply(defaultAreaTree, root);
 					}
 					break;
 				}
