@@ -15,7 +15,8 @@ import org.fit.segm.grouping.op.Separator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.bigdata.journal.RootBlockCommitter;
+import weka.core.DistanceFunction;
+import ch.qos.logback.classic.Level;
 
 public class VipsBasedOperator extends BaseOperator
 {
@@ -199,6 +200,14 @@ public class VipsBasedOperator extends BaseOperator
     					}
 					}
         		}
+        		
+        		//TODO:comment this output dump lately
+        		System.out.println();
+        		System.out.println("Remaining separators:");
+        		for (VipsBasedSeparator separator : detectedSeparators) {
+					System.out.println(separator.toString());
+				}
+        		printCreatedSubtree(newNode, 0);
     		}
 		}
     	
@@ -210,7 +219,38 @@ public class VipsBasedOperator extends BaseOperator
     	processLeafNodes(root);
     }
     
-    private void divideDomTree(AreaImpl root, int currentLevel)
+    private void printCreatedSubtree(AreaImpl root, int level)
+    {
+    	if(level == 0)
+    	{
+    		System.out.println();
+    		System.out.println("--------------------------------------------");
+    		System.out.println("Root: " + root.toString());
+    	}
+		if(root.getChildCount() != 0)
+    	{
+			for (int i = 0; i < level; i++) {
+				System.out.print("      ");
+			}
+			if(level != 0)
+				System.out.println("NOT Leaf node:" + root.toString());
+			level++;
+    		for (int i = 0; i < root.getChildCount(); i++)
+    		{
+    			printCreatedSubtree((AreaImpl) root.getChildArea(i), level);
+    		}
+    	}
+    	else
+    	{
+    		for (int i = 0; i < level; i++) {
+				System.out.print("      ");
+			}
+    		System.out.println("Leaf node:" + root.toString());
+    	}
+
+	}
+
+	private void divideDomTree(AreaImpl root, int currentLevel)
     {
     	//collecting detected separators at actual tree level
     	collectActualSeparators(root);
@@ -518,13 +558,13 @@ public class VipsBasedOperator extends BaseOperator
     {
     	if(root.getChildCount() != 0)
     	{
-    		System.out.println("This is NOT Leaf node:" + root.toString());
+    		//System.out.println("This is NOT Leaf node:" + root.toString());
     		for (int i = 0; i < root.getChildCount(); i++)
     			processLeafNodes((AreaImpl) root.getChildArea(i));
     	}
     	else
     	{
-    		System.out.println("This is Leaf node:" + root.toString());
+    		//System.out.println("This is Leaf node:" + root.toString());
 			for (VipsBasedVisualBlock visualBlock : visualBlocksPool)
 			{
 				if(root == visualBlock.getArea())
@@ -550,30 +590,103 @@ public class VipsBasedOperator extends BaseOperator
     private void reconfigureSeparators(AreaImpl root)
     {
     	List<VipsBasedSeparator> associatedSeparators = getAssociatedSeparators(root);
+    	Area child = null;
+    	Area leastDistantChild = null;
+    	int area1Distance = 0;
+    	int area2Distance = 0;
+    	int shortestDistance = 0;
+    	boolean separatorReconfigured = false;
+    	boolean area1Reconfigured = false;
     	
     	for (VipsBasedSeparator actualSeparator : associatedSeparators)
     	{
     		//System.out.println(actualSeparator.toString());
+    		leastDistantChild = null;
+    		area1Distance = 0;
+    		area2Distance = 0;
+    		shortestDistance = 0;
+    		area1Reconfigured = false;
+    		separatorReconfigured = false;
 			
-    		for (Area child : root.getChildAreas())
+    		for (int i = 0; i < root.getChildCount(); i++)
 			{
 				//System.out.println(child.toString());
+    			
+    			child = root.getChildArea(i);
 
 				if(actualSeparator.getType() == Separator.HORIZONTAL)
 				{
-					if(Math.abs(actualSeparator.getY1() - child.getY2()) < 2) //TODO: this should be applied only on Visual Blocks
-						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea1((AreaImpl)child);
-					else if(Math.abs(actualSeparator.getY2() - child.getY1()) < 2)
-						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea2((AreaImpl)child);
+					area1Distance = Math.abs(actualSeparator.getY1() - child.getY2());
+					area2Distance = Math.abs(actualSeparator.getY2() - child.getY1());
 				}
 				else if(actualSeparator.getType() == Separator.VERTICAL)
+				{System.out.println("Vypocet\n" + actualSeparator.toString() + "\n");
+					area1Distance = Math.abs(actualSeparator.getX1() - child.getX2());
+					area2Distance = Math.abs(actualSeparator.getX2() - child.getX1());
+				}
+				
+				if(area1Distance < 2) //TODO: this should be applied only on Visual Blocks!!!!!!! Need to implement a method witch will return just VisualBlocks of the currently divided node and then iterate through this VisualBlocks instead of root.getChildAreas().
 				{
-					if(Math.abs(actualSeparator.getX1() - child.getX2()) < 2)
-						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea1((AreaImpl)child);
-					else if(Math.abs(actualSeparator.getX2() - child.getX1()) < 2)
-						detectedSeparators.get(detectedSeparators.indexOf(actualSeparator)).setArea2((AreaImpl)child);
+					separatorReconfigured = true;
+					actualSeparator.setArea1((AreaImpl)child);
+					break;
+				}
+				else if(area2Distance < 2)
+				{
+					separatorReconfigured = true;
+					actualSeparator.setArea2((AreaImpl)child);
+					break;
+				}
+				else
+				{System.out.println("Neni prilehly\n" + actualSeparator.toString() + "\n");		
+					if(i == 0) //first child
+					{
+						leastDistantChild = child;
+						if(area1Distance < area2Distance)
+						{
+							shortestDistance = area1Distance;
+							area1Reconfigured = true;
+						}
+						else
+						{
+							shortestDistance = area2Distance;
+							area1Reconfigured = false;
+						}
+					}
+					else
+					{
+						if(area1Distance < area2Distance)
+						{
+							if(area1Distance < shortestDistance)
+							{
+								leastDistantChild = child;
+								shortestDistance = area1Distance;
+								area1Reconfigured = true;
+							}
+						}
+						else
+						{
+							if(area2Distance < shortestDistance)
+							{
+								leastDistantChild = child;
+								shortestDistance = area2Distance;
+								area1Reconfigured = false;
+							}
+						}
+					}
 				}
 			}
+    		if(!separatorReconfigured)
+    		{System.out.println("Nastavi se na \n" + actualSeparator.toString() + "\n" + leastDistantChild.toString() + "\n");
+    			if(area1Reconfigured)
+    			{
+    				actualSeparator.setArea1((AreaImpl)leastDistantChild);
+    			}
+    			else
+    			{
+    				actualSeparator.setArea2((AreaImpl)leastDistantChild);
+				}
+    		}
 		}
     }
     
