@@ -15,9 +15,6 @@ import org.fit.segm.grouping.op.Separator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import weka.core.DistanceFunction;
-import ch.qos.logback.classic.Level;
-
 public class VipsBasedOperator extends BaseOperator
 {
 	private static Logger log = LoggerFactory.getLogger(VipsBasedOperator.class);
@@ -76,6 +73,10 @@ public class VipsBasedOperator extends BaseOperator
         return paramTypes;
     }
     
+    public List<VipsBasedVisualBlock> getVisualBlocksPool() {
+		return visualBlocksPool;
+	}
+    
     //----------------------------------------------------
     
     @Override
@@ -103,6 +104,7 @@ public class VipsBasedOperator extends BaseOperator
     
     protected void performVipsAlgorithm(AreaImpl root)
     {
+    	//TODO: Implement refreshing of used data structures!!!!!!!!!!!!!!!!
         //phase of visual block extraction
     	divideDomTree(root, startLevel);
     	
@@ -113,7 +115,7 @@ public class VipsBasedOperator extends BaseOperator
     	//phase of content structure construction
     	VipsBasedSeparator actualSeparator = null;
     	AreaImpl newNode = null;
-    	while (detectedSeparators.size() != 0)
+    	while (detectedSeparators.size() != 0) //TODO: Implement a method, which will check every new created subTree and in case that there is no separator in detectedSeparators and some subTree hasn't been used in final tree building process, the method will place this subTree to correct place in final Tree
     	{
 			//System.out.println(detectedSeparators.size());
     		
@@ -131,7 +133,7 @@ public class VipsBasedOperator extends BaseOperator
         		
         		List<VipsBasedSeparator> detectedSeparatorsCopy = new ArrayList<VipsBasedSeparator>(detectedSeparators);
         		//for-each separator with same weight
-        		while(detectedSeparatorsCopy.size() != 0)
+        		while(detectedSeparatorsCopy.size() != 0) //TODO: This should't been processed over separators with different TYPE
         		{
         			VipsBasedSeparator sameWeightSeparator = detectedSeparatorsCopy.get(0);
         			
@@ -202,12 +204,13 @@ public class VipsBasedOperator extends BaseOperator
         		}
         		
         		//TODO:comment this output dump lately
-        		System.out.println();
+        		/*System.out.println();
         		System.out.println("Remaining separators:");
         		for (VipsBasedSeparator separator : detectedSeparators) {
+        			//if(separator.getType() == Separator.VERTICAL)
 					System.out.println(separator.toString());
 				}
-        		printCreatedSubtree(newNode, 0);
+        		printCreatedSubtree(newNode, 0);*/
     		}
 		}
     	
@@ -257,38 +260,38 @@ public class VipsBasedOperator extends BaseOperator
     	
     	if(dividable(root, currentLevel)) //divide this block
     	{ 
-    		for (int i = 0; i < root.getChildCount(); i++)
-    		{
-    			reconfigureSeparators(root);
-    			divideDomTree((AreaImpl) root.getChildArea(i), currentLevel++);
-    		}
-    	}
-    	else //is a visual block
-    	{ 	
     		if(!isNotValidNode)
     		{
-    			VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
-        		
-    			if(root.getBoxes() != null && root.getBoxes().size() != 0)
-    				visualBlock.setBlock(root.getBoxes().firstElement());
-    			else
-    				visualBlock.setBlock(null);
-    			
-    			visualBlock.setArea(root);
-    			visualBlock.setDomNode(root);
-    			
-    			if(docValueIsKnown)
-    			{
-    				visualBlock.setDoc(docValue);
-    				docValueIsKnown = false;
-    			}
-    			else
-    				visualBlock.setDoc(0f); //TODO: DoC evaluation of visualBlock
-    			
-    			visualBlocksPool.add(visualBlock); //add visual block to pool
+	    		for (int i = 0; i < root.getChildCount(); i++)
+	    		{
+	    			reconfigureSeparators(root);
+	    			divideDomTree((AreaImpl) root.getChildArea(i), currentLevel++);
+	    		}
     		}
     		else
     			isNotValidNode = false;
+    	}
+    	else //is a visual block
+    	{ 	
+			VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
+    		
+			if(root.getBoxes() != null && root.getBoxes().size() != 0)
+				visualBlock.setBlock(root.getBoxes().firstElement());
+			else
+				visualBlock.setBlock(null);
+			
+			visualBlock.setArea(root);
+			visualBlock.setDomNode(root);
+			
+			if(docValueIsKnown)
+			{
+				visualBlock.setDoc(docValue);
+				docValueIsKnown = false;
+			}
+			else
+				visualBlock.setDoc(0f); //TODO: DoC evaluation of visualBlock
+			
+			visualBlocksPool.add(visualBlock); //add visual block to pool
 		}
     }
     
@@ -306,7 +309,7 @@ public class VipsBasedOperator extends BaseOperator
     	if(isMetVipsRule1(root))
     	{
     		isNotValidNode = true;
-    		return true;
+    		return false;
     	}
     	else if(isMetVipsRule2(root))
     	{
@@ -442,6 +445,8 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isLineBreakNode(Area root)
     {
     	String tagName = root.getBoxes().get(0).getTagName();
+    	if(tagName == null)
+    		return false;
     	
     	//if the node isn't a inline element
     	if(	//TODO: are these tag names correctly formated?
@@ -600,7 +605,6 @@ public class VipsBasedOperator extends BaseOperator
     	
     	for (VipsBasedSeparator actualSeparator : associatedSeparators)
     	{
-    		//System.out.println(actualSeparator.toString());
     		leastDistantChild = null;
     		area1Distance = 0;
     		area2Distance = 0;
@@ -610,22 +614,22 @@ public class VipsBasedOperator extends BaseOperator
 			
     		for (int i = 0; i < root.getChildCount(); i++)
 			{
-				//System.out.println(child.toString());
-    			
     			child = root.getChildArea(i);
-
+    			if(!isValidNode((AreaImpl)child))
+    				continue;
+    			
 				if(actualSeparator.getType() == Separator.HORIZONTAL)
 				{
 					area1Distance = Math.abs(actualSeparator.getY1() - child.getY2());
 					area2Distance = Math.abs(actualSeparator.getY2() - child.getY1());
 				}
 				else if(actualSeparator.getType() == Separator.VERTICAL)
-				{System.out.println("Vypocet\n" + actualSeparator.toString() + "\n");
+				{//System.out.println("Vypocet\n" + actualSeparator.toString() + "\n");
 					area1Distance = Math.abs(actualSeparator.getX1() - child.getX2());
 					area2Distance = Math.abs(actualSeparator.getX2() - child.getX1());
 				}
 				
-				if(area1Distance < 2) //TODO: this should be applied only on Visual Blocks!!!!!!! Need to implement a method witch will return just VisualBlocks of the currently divided node and then iterate through this VisualBlocks instead of root.getChildAreas().
+				if(area1Distance < 2)
 				{
 					separatorReconfigured = true;
 					actualSeparator.setArea1((AreaImpl)child);
@@ -638,7 +642,8 @@ public class VipsBasedOperator extends BaseOperator
 					break;
 				}
 				else
-				{System.out.println("Neni prilehly\n" + actualSeparator.toString() + "\n");		
+				{/*if(actualSeparator.getType() == Separator.VERTICAL)
+					System.out.println("ELSE vetev\n" + actualSeparator.toString() + "\n");	*/	
 					if(i == 0) //first child
 					{
 						leastDistantChild = child;
@@ -677,7 +682,8 @@ public class VipsBasedOperator extends BaseOperator
 				}
 			}
     		if(!separatorReconfigured)
-    		{System.out.println("Nastavi se na \n" + actualSeparator.toString() + "\n" + leastDistantChild.toString() + "\n");
+    		{/*if(actualSeparator.getType() == Separator.VERTICAL && leastDistantChild != null)
+    			System.out.println("Nastavi se na \n" + actualSeparator.toString() + "\n" + leastDistantChild.toString() + "\n");*/
     			if(area1Reconfigured)
     			{
     				actualSeparator.setArea1((AreaImpl)leastDistantChild);
@@ -690,6 +696,7 @@ public class VipsBasedOperator extends BaseOperator
 		}
     }
     
+    //TODO: Because of this it would be better implement a method, which will collect the separators from all input tree before the visualBlockExtraction phase starts.
     private List<VipsBasedSeparator> getAssociatedSeparators(AreaImpl node)
     {
     	List<VipsBasedSeparator> result = new ArrayList<VipsBasedSeparator>();
@@ -701,5 +708,36 @@ public class VipsBasedOperator extends BaseOperator
 		}
     	
     	return result;
+    }
+    
+    /*private List<AreaImpl> getActualNodeVisualBlocks(AreaImpl root, int currentLevel)
+    {
+    	List<AreaImpl> result = new ArrayList<AreaImpl>();
+    	
+    	if(dividable(root, currentLevel)) //divide this block
+    	{ 
+    		if(!isNotValidNode)
+    		{
+    			if(currentLevel < 1)
+    				for (int i = 0; i < root.getChildCount(); i++)
+    					result.addAll(getActualNodeVisualBlocks((AreaImpl) root.getChildArea(i), currentLevel++));
+    		}
+    		else
+    			isNotValidNode = false;
+    	}
+    	else //is a visual block
+    	{ 		
+			result.add(root);
+		}
+    	return result;
+    }*/
+    
+    private boolean isValidNode(AreaImpl root)
+    {
+    	if(isMetVipsRule1(root))
+    		return false;
+    	else {
+			return true;
+		}
     }
 }
