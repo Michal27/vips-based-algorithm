@@ -15,6 +15,8 @@ import org.fit.segm.grouping.op.Separator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.joestelmach.natty.generated.DateParser_NumericRules.int_00_to_23_optional_prefix_return;
+
 public class VipsBasedOperator extends BaseOperator
 {
 	private static Logger log = LoggerFactory.getLogger(VipsBasedOperator.class);
@@ -104,7 +106,10 @@ public class VipsBasedOperator extends BaseOperator
     
     protected void performVipsAlgorithm(AreaImpl root)
     {
-    	//TODO: Implement refreshing of used data structures!!!!!!!!!!!!!!!!
+    	visualBlocksPool.clear();
+    	detectedSeparators.clear();
+    	isNotValidNode = false;
+
         //phase of visual block extraction
     	divideDomTree(root, startLevel);
     	
@@ -113,6 +118,15 @@ public class VipsBasedOperator extends BaseOperator
     	filterNonVisualSeparators();
     	
     	//phase of content structure construction
+    	contentStructureConstruction(root);
+    	
+    }
+    
+    private void contentStructureConstruction(AreaImpl root)
+    {
+    	List<AreaImpl> createdSubtrees = new ArrayList<AreaImpl>();
+    	List<AreaImpl> rootChilds = new ArrayList<AreaImpl>();
+    	
     	VipsBasedSeparator actualSeparator = null;
     	AreaImpl newNode = null;
     	while (detectedSeparators.size() != 0) //TODO: Implement a method, which will check every new created subTree and in case that there is no separator in detectedSeparators and some subTree hasn't been used in final tree building process, the method will place this subTree to correct place in final Tree
@@ -160,7 +174,7 @@ public class VipsBasedOperator extends BaseOperator
 					detectedSeparatorsCopy.remove(0);
 				}
         		
-        		//update bounds of the newNode
+        		//update bounds of the newNode //TODO: CHECK THIS! Sometimes the bounds aren't correct (setting just according to first ?)
         		for (int i = 0; i < newNode.getChildCount(); i++)
         		{
         			Area child = newNode.getChildArea(i);
@@ -203,6 +217,13 @@ public class VipsBasedOperator extends BaseOperator
 					}
         		}
         		
+        		createdSubtrees.add(newNode); //TODO: MAYBE all visual block's Areas should be in createdSubtrees at the beginning
+        		for (Area child : newNode.getChildAreas())
+        		{
+        			if(createdSubtrees.contains(child))
+            			createdSubtrees.remove(child);
+				}
+        		
         		//TODO:comment this output dump lately
         		/*System.out.println();
         		System.out.println("Remaining separators:");
@@ -214,15 +235,76 @@ public class VipsBasedOperator extends BaseOperator
     		}
 		}
     	
+    	//append unused subtrees to final tree
+    	createdSubtrees.remove(newNode);
+    	if(createdSubtrees.size() != 0)
+    		rootChilds = processUnusedSubtrees(newNode, createdSubtrees);
+    	
     	//refer actual tree to output
     	root.removeAllChildren();
     	if(newNode != null)
     		root.appendChild(newNode);
+    	if(rootChilds.size() != 0)
+    	{
+    		for (AreaImpl child : rootChilds)
+			{
+				root.appendChild(child);
+			}
+    	}
     	
+    	//if granularity condition isn't met, further divide leaf nodes.
     	processLeafNodes(root);
     }
     
-    private void printCreatedSubtree(AreaImpl root, int level)
+    private List<AreaImpl> processUnusedSubtrees(AreaImpl root, List<AreaImpl> subtrees)
+    {
+    	Collections.reverse(subtrees);
+    	AreaImpl lastIntersectingArea = null;
+    	List<AreaImpl> result = new ArrayList<AreaImpl>();
+    	
+		for (AreaImpl subtree : subtrees)
+		{
+			lastIntersectingArea = getLastIntersectingArea(root, subtree);
+			if(lastIntersectingArea != null)
+				lastIntersectingArea.appendChild(subtree);
+			else
+				result.add(subtree);
+			printCreatedSubtree(subtree, 0);
+		}
+		return result;
+	}
+
+	private AreaImpl getLastIntersectingArea(AreaImpl root, AreaImpl area)
+	{
+		Area child = null;
+		AreaImpl tmpResult = null;
+		AreaImpl result = null;
+		
+		for (int i = 0; i < root.getChildCount(); i++)
+		{
+			child = root.getChildArea(i);
+			if((tmpResult = getLastIntersectingArea((AreaImpl)child, area)) != null)
+				result = tmpResult;
+		}
+		
+		if(result == null)
+		{
+			if((root.getBounds().encloses(area.getBounds())))
+			{
+				return root;
+			}
+			else
+			{
+				return null;
+			}
+		}
+		else
+		{
+			return result;
+		}
+	}
+
+	private void printCreatedSubtree(AreaImpl root, int level)
     {
     	if(level == 0)
     	{
@@ -265,7 +347,7 @@ public class VipsBasedOperator extends BaseOperator
 	    		for (int i = 0; i < root.getChildCount(); i++)
 	    		{
 	    			reconfigureSeparators(root);
-	    			divideDomTree((AreaImpl) root.getChildArea(i), currentLevel++);
+	    			divideDomTree((AreaImpl) root.getChildArea(i), ++currentLevel);
 	    		}
     		}
     		else
