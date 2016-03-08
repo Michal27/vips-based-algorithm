@@ -12,6 +12,7 @@ import org.fit.layout.model.Box;
 import org.fit.layout.model.Rectangular;
 import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.Separator;
+import org.openrdf.query.algebra.Join;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +76,16 @@ public class VipsBasedOperator extends BaseOperator
         return paramTypes;
     }
     
+    public float getPdocValue()
+    {
+        return pdocValue;
+    }
+
+    public void setPdocValue(float pdocValue)
+    {
+        this.pdocValue = pdocValue;
+    }
+    
     public List<VipsBasedVisualBlock> getVisualBlocksPool() {
 		return visualBlocksPool;
 	}
@@ -113,6 +124,8 @@ public class VipsBasedOperator extends BaseOperator
         //phase of visual block extraction
     	divideDomTree(root, startLevel);
     	
+    	joinLineVisualBlocks();
+    	
     	sortSeparatorsAscending();
     	
     	filterNonVisualSeparators();
@@ -122,14 +135,39 @@ public class VipsBasedOperator extends BaseOperator
     	
     }
     
-    private void contentStructureConstruction(AreaImpl root)
+    private void joinLineVisualBlocks()
+    {
+    	AreaImpl firstArea = null;
+    	AreaImpl secondArea = null;
+    	VipsBasedSeparator lineSeparator = null;
+    	
+		for (VipsBasedVisualBlock firstVisualBlock : visualBlocksPool)
+		{
+			for (VipsBasedVisualBlock secondVisualBlock : visualBlocksPool)
+			{
+				firstArea = firstVisualBlock.getArea();
+				secondArea = secondVisualBlock.getArea();
+				
+				if((Math.abs(firstArea.getX2() - secondArea.getX1()) < 2) && (firstArea.getY1() == secondArea.getY1()) && (firstArea.getY2() == secondArea.getY2()))
+				{
+					lineSeparator = new VipsBasedSeparator(Separator.VERTICAL, firstArea.getX2(), firstArea.getY1(), secondArea.getX1(), firstArea.getY2());
+					lineSeparator.setArea1(firstArea);
+					lineSeparator.setArea2(secondArea);
+					detectedSeparators.add(lineSeparator);
+				}
+			}
+		}
+		
+	}
+
+	private void contentStructureConstruction(AreaImpl root)
     {
     	List<AreaImpl> createdSubtrees = new ArrayList<AreaImpl>();
     	List<AreaImpl> rootChilds = new ArrayList<AreaImpl>();
     	
     	VipsBasedSeparator actualSeparator = null;
     	AreaImpl newNode = null;
-    	while (detectedSeparators.size() != 0) //TODO: Implement a method, which will check every new created subTree and in case that there is no separator in detectedSeparators and some subTree hasn't been used in final tree building process, the method will place this subTree to correct place in final Tree
+    	while (detectedSeparators.size() != 0)
     	{
 			//System.out.println(detectedSeparators.size());
     		
@@ -269,7 +307,6 @@ public class VipsBasedOperator extends BaseOperator
 				lastIntersectingArea.appendChild(subtree);
 			else
 				result.add(subtree);
-			printCreatedSubtree(subtree, 0);
 		}
 		return result;
 	}
@@ -706,7 +743,7 @@ public class VipsBasedOperator extends BaseOperator
 					area2Distance = Math.abs(actualSeparator.getY2() - child.getY1());
 				}
 				else if(actualSeparator.getType() == Separator.VERTICAL)
-				{//System.out.println("Vypocet\n" + actualSeparator.toString() + "\n");
+				{
 					area1Distance = Math.abs(actualSeparator.getX1() - child.getX2());
 					area2Distance = Math.abs(actualSeparator.getX2() - child.getX1());
 				}
@@ -724,8 +761,7 @@ public class VipsBasedOperator extends BaseOperator
 					break;
 				}
 				else
-				{/*if(actualSeparator.getType() == Separator.VERTICAL)
-					System.out.println("ELSE vetev\n" + actualSeparator.toString() + "\n");	*/	
+				{
 					if(i == 0) //first child
 					{
 						leastDistantChild = child;
@@ -764,8 +800,7 @@ public class VipsBasedOperator extends BaseOperator
 				}
 			}
     		if(!separatorReconfigured)
-    		{/*if(actualSeparator.getType() == Separator.VERTICAL && leastDistantChild != null)
-    			System.out.println("Nastavi se na \n" + actualSeparator.toString() + "\n" + leastDistantChild.toString() + "\n");*/
+    		{
     			if(area1Reconfigured)
     			{
     				actualSeparator.setArea1((AreaImpl)leastDistantChild);

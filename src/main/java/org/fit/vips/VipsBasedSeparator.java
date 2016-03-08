@@ -24,6 +24,7 @@ public class VipsBasedSeparator extends Separator {
     public int getWeight()
 	{
 	    //TODO Implement evaluation of separators Weight
+	    //TODO: if vertical (maybe horizontal either) separators width is 1 set weight to 0
     	return 0;
 	}*/
 }
