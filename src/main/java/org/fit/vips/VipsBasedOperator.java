@@ -120,6 +120,8 @@ public class VipsBasedOperator extends BaseOperator
     	visualBlocksPool.clear();
     	detectedSeparators.clear();
     	isNotValidNode = false;
+    	
+    	collectSeparators(root);
 
         //phase of visual block extraction
     	divideDomTree(root, startLevel);
@@ -148,7 +150,7 @@ public class VipsBasedOperator extends BaseOperator
 				firstArea = firstVisualBlock.getArea();
 				secondArea = secondVisualBlock.getArea();
 				
-				if((Math.abs(firstArea.getX2() - secondArea.getX1()) < 2) && (firstArea.getY1() == secondArea.getY1()) && (firstArea.getY2() == secondArea.getY2()))
+				if((Math.abs(firstArea.getX2() - secondArea.getX1()) < 2) && (Math.abs(firstArea.getY1() - secondArea.getY1()) < 6) && (Math.abs(firstArea.getY2() - secondArea.getY2()) < 6))
 				{
 					lineSeparator = new VipsBasedSeparator(Separator.VERTICAL, firstArea.getX2(), firstArea.getY1(), secondArea.getX1(), firstArea.getY2());
 					lineSeparator.setArea1(firstArea);
@@ -165,6 +167,11 @@ public class VipsBasedOperator extends BaseOperator
     	List<AreaImpl> createdSubtrees = new ArrayList<AreaImpl>();
     	List<AreaImpl> rootChilds = new ArrayList<AreaImpl>();
     	
+    	for (VipsBasedVisualBlock visualBlock  : visualBlocksPool)
+    	{
+			createdSubtrees.add(visualBlock.getArea());
+		}
+    	
     	VipsBasedSeparator actualSeparator = null;
     	AreaImpl newNode = null;
     	while (detectedSeparators.size() != 0)
@@ -173,7 +180,7 @@ public class VipsBasedOperator extends BaseOperator
     		
     		actualSeparator = detectedSeparators.get(0);
     		
-    		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null)) //TODO: maybe joining other sibling separators
+    		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null) && (actualSeparator.getArea1() != actualSeparator.getArea2())) //TODO: maybe joining other sibling separators
     		{
     			//merge separator's visual blocks to new node
     			newNode = new AreaImpl(0, 0, 0, 0);
@@ -185,7 +192,7 @@ public class VipsBasedOperator extends BaseOperator
         		
         		List<VipsBasedSeparator> detectedSeparatorsCopy = new ArrayList<VipsBasedSeparator>(detectedSeparators);
         		//for-each separator with same weight
-        		while(detectedSeparatorsCopy.size() != 0) //TODO: This should't been processed over separators with different TYPE
+        		while(detectedSeparatorsCopy.size() != 0)
         		{
         			VipsBasedSeparator sameWeightSeparator = detectedSeparatorsCopy.get(0);
         			
@@ -195,13 +202,13 @@ public class VipsBasedOperator extends BaseOperator
 					//for-each child of newNode
 					for (Area child : newNode.getChildAreas())
 					{
-						if((sameWeightSeparator.getArea1() == child) && (sameWeightSeparator.getArea2() != child))
+						if((sameWeightSeparator.getArea1() == child) && (sameWeightSeparator.getArea2() != child) && (actualSeparator.getType() == sameWeightSeparator.getType()))
 						{
 							newNode.appendChild(sameWeightSeparator.getArea2());
 							detectedSeparators.remove(sameWeightSeparator);
 							break;
 						}
-						else if ((sameWeightSeparator.getArea2() == child) && (sameWeightSeparator.getArea1() != child))
+						else if ((sameWeightSeparator.getArea2() == child) && (sameWeightSeparator.getArea1() != child) && (actualSeparator.getType() == sameWeightSeparator.getType()))
 						{
 							newNode.appendChild(sameWeightSeparator.getArea1());
 							detectedSeparators.remove(sameWeightSeparator);
@@ -212,7 +219,7 @@ public class VipsBasedOperator extends BaseOperator
 					detectedSeparatorsCopy.remove(0);
 				}
         		
-        		//update bounds of the newNode //TODO: CHECK THIS! Sometimes the bounds aren't correct (setting just according to first ?)
+        		//update bounds of the newNode
         		for (int i = 0; i < newNode.getChildCount(); i++)
         		{
         			Area child = newNode.getChildArea(i);
@@ -233,7 +240,7 @@ public class VipsBasedOperator extends BaseOperator
 						}
 						if(child.getY1() < bounds.getY1())
 						{
-							bounds.setX1(child.getX1());
+							bounds.setY1(child.getY1());
 							newNode.setBounds(bounds);
 						}
 					}
@@ -255,7 +262,7 @@ public class VipsBasedOperator extends BaseOperator
 					}
         		}
         		
-        		createdSubtrees.add(newNode); //TODO: MAYBE all visual block's Areas should be in createdSubtrees at the beginning
+        		createdSubtrees.add(newNode);
         		for (Area child : newNode.getChildAreas())
         		{
         			if(createdSubtrees.contains(child))
@@ -275,7 +282,7 @@ public class VipsBasedOperator extends BaseOperator
     	
     	//append unused subtrees to final tree
     	createdSubtrees.remove(newNode);
-    	if(createdSubtrees.size() != 0)
+    	if(createdSubtrees.size() != 0 && newNode != null)
     		rootChilds = processUnusedSubtrees(newNode, createdSubtrees);
     	
     	//refer actual tree to output
@@ -373,10 +380,7 @@ public class VipsBasedOperator extends BaseOperator
 	}
 
 	private void divideDomTree(AreaImpl root, int currentLevel)
-    {
-    	//collecting detected separators at actual tree level
-    	collectActualSeparators(root);
-    	
+    {  	
     	if(dividable(root, currentLevel)) //divide this block
     	{ 
     		if(!isNotValidNode)
@@ -584,6 +588,17 @@ public class VipsBasedOperator extends BaseOperator
 			return false;
     }
     
+    private void collectSeparators(AreaImpl root)
+    {
+    	//collecting detected separators at actual tree level
+    	collectActualSeparators(root);
+    	
+    	for (int i = 0; i < root.getChildCount(); i++)
+		{
+			collectSeparators((AreaImpl) root.getChildArea(i));
+		}
+    }
+    
     private void collectActualSeparators(AreaImpl root)
     {
     	VipsBasedSeparatorSet actualLevelSeparators = new VipsBasedSeparatorSet(root);
@@ -621,19 +636,6 @@ public class VipsBasedOperator extends BaseOperator
      */
     private void filterNonVisualSeparators()
     {
-    	/*for (VipsBasedSeparator separator : detectedSeparators) {
-    		System.out.println(separator.toString());
-    		
-    		System.out.println("SeparatorArea_BEGIN");
-    		if(separator.getArea1() != null)
-    			System.out.println(separator.getArea1().toString());
-    		if(separator.getArea2() != null)
-    			System.out.println(separator.getArea2().toString());
-    		System.out.println("SeparatorArea_END");
-		}
-    	for (VipsBasedVisualBlock block : visualBlocksPool) {
-    		System.out.println(block.getArea().toString());
-		}*/
     	//make a copy of detectedSeparators
     	ArrayList<VipsBasedSeparator> separators = new ArrayList<VipsBasedSeparator>(detectedSeparators);
     	
@@ -657,18 +659,28 @@ public class VipsBasedOperator extends BaseOperator
 			if(isArea1Visual && isArea2Visual)
 			{
 				//prepare separator for tree reconstruction process
-				removeAreasChildNodes(detectedSeparators.get(detectedSeparators.indexOf(separator)));
+				removeAreasChildNodes(separator);
+				removeIncorectHSeparator(separator);
 			}
 			else
 				detectedSeparators.remove(separator);
 		}
-    	/*System.out.println(detectedSeparators.size());
-    	for (VipsBasedSeparator vipsBasedSeparator : detectedSeparators) {
-    		System.out.println(vipsBasedSeparator.toString());
-		}*/
     }
     
-    private void removeAreasChildNodes(VipsBasedSeparator separator)
+    private void removeIncorectHSeparator(VipsBasedSeparator separator)
+    {
+    	int lengthArea1 = separator.getArea1().getX2() - separator.getArea1().getX1();
+    	
+    	if(separator.getType() == Separator.HORIZONTAL)
+    	{
+    		if((separator.getArea1().getX1() - separator.getArea2().getX2()) > (lengthArea1))
+    			detectedSeparators.remove(separator);
+    		else if((separator.getArea2().getX1() - separator.getArea1().getX2()) > (lengthArea1))
+    			detectedSeparators.remove(separator);
+    	}
+	}
+
+	private void removeAreasChildNodes(VipsBasedSeparator separator)
     {
     	AreaImpl area1 = separator.getArea1();
     	AreaImpl area2 = separator.getArea2();
@@ -813,7 +825,6 @@ public class VipsBasedOperator extends BaseOperator
 		}
     }
     
-    //TODO: Because of this it would be better implement a method, which will collect the separators from all input tree before the visualBlockExtraction phase starts.
     private List<VipsBasedSeparator> getAssociatedSeparators(AreaImpl node)
     {
     	List<VipsBasedSeparator> result = new ArrayList<VipsBasedSeparator>();
