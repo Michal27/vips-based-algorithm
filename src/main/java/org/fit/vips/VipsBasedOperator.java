@@ -30,6 +30,7 @@ public class VipsBasedOperator extends BaseOperator
 	
     protected List<VipsBasedVisualBlock> visualBlocksPool = new ArrayList<VipsBasedVisualBlock>();
     protected List<VipsBasedSeparator> detectedSeparators = new ArrayList<VipsBasedSeparator>();
+    private List<AreaImpl> nonDividableNodes = new ArrayList<AreaImpl>();
     private static final int startLevel = 0;
     private boolean isNotValidNode = false;
     private boolean docValueIsKnown = false;
@@ -180,7 +181,7 @@ public class VipsBasedOperator extends BaseOperator
     		
     		actualSeparator = detectedSeparators.get(0);
     		
-    		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null) && (actualSeparator.getArea1() != actualSeparator.getArea2())) //TODO: maybe joining other sibling separators
+    		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null) && (actualSeparator.getArea1() != actualSeparator.getArea2()))
     		{
     			//merge separator's visual blocks to new node
     			newNode = new AreaImpl(0, 0, 0, 0);
@@ -269,7 +270,6 @@ public class VipsBasedOperator extends BaseOperator
             			createdSubtrees.remove(child);
 				}
         		
-        		//TODO:comment this output dump lately
         		/*System.out.println();
         		System.out.println("Remaining separators:");
         		for (VipsBasedSeparator separator : detectedSeparators) {
@@ -412,23 +412,54 @@ public class VipsBasedOperator extends BaseOperator
 				docValueIsKnown = false;
 			}
 			else
-				visualBlock.setDoc(0f); //TODO: DoC evaluation of visualBlock
+			{
+				//this is for Vips rule 7
+				for (AreaImpl nonDividableNode : nonDividableNodes)
+				{
+					if(nonDividableNode == root)
+					{
+						visualBlock.setDoc(nonDividableNodeDocEvaluation(root));
+						visualBlocksPool.add(visualBlock);
+						return;
+					}
+				}
+				
+				visualBlock.setDoc(docEvaluation(root));
+			}
 			
 			visualBlocksPool.add(visualBlock); //add visual block to pool
 		}
     }
     
-    private boolean dividable(AreaImpl root, int currentLevel)
+    private float docEvaluation(AreaImpl root) {
+    	//TODO: DoC evaluation of visualBlock
+		return 0;
+	}
+
+	private float nonDividableNodeDocEvaluation(AreaImpl root) {
+		// TODO evaluate Doc of NonDividableBlock (Vips rule 7)
+		return 0;
+	}
+
+	private boolean dividable(AreaImpl root, int currentLevel)
     {
     	if(currentLevel == startLevel) //root is the TOP block
     		return true;
     	else
+    	{
+    		for (AreaImpl nonDividableNode : nonDividableNodes)
+    		{
+				if(root == nonDividableNode)
+					return false;
+			}
     		return !isVisualBlock(root);
+    	}
     }
     
     private boolean isVisualBlock(AreaImpl root)
     {
     	//TODO: apply heuristic rules to root
+    	//TODO: begin here with splitting the rules applications to proper groups
     	if(isMetVipsRule1(root))
     	{
     		isNotValidNode = true;
@@ -438,19 +469,47 @@ public class VipsBasedOperator extends BaseOperator
     	{
     		return false;
     	}
-    	else if (isMetVipsRule3(root))
+    	else if(isMetVipsRule3(root))
     	{
 			return false;
 		}
-    	else if (isMetVipsRule4(root))
+    	else if(isMetVipsRule4(root))
     	{
 			return true;
 		}
-    	else if (isMetVipsRule5(root))
+    	else if(isMetVipsRule5(root))
     	{
     		return false;
 		}
-    	else//TODO: this is just for testing
+    	else if(isMetVipsRule6(root))
+    	{
+    		return false;
+		}
+    	else if(isMetVipsRule7(root))
+    	{
+    		return false;
+    	}
+    	else if(isMetVipsRule8(root))
+    	{
+    		return true;
+    	}
+    	else if(isMetVipsRule9(root))
+    	{
+    		return true;
+    	}
+    	else if(isMetVipsRule10(root))
+    	{
+    		return true;
+    	}
+    	else if(isMetVipsRule11(root))
+    	{
+    		return false;
+    	}
+    	else if(isMetVipsRule12(root))
+    	{
+    		return true;
+    	}
+    	else
     		return false;
     }
     
@@ -500,6 +559,7 @@ public class VipsBasedOperator extends BaseOperator
     }
     
     //TODO: is this rule really needed? Is it possible to know root node of some block? Isn't it a nonsense?
+    //TODO: check this
     private boolean isMetVipsRule3(AreaImpl root)
     {
     	/*	
@@ -563,6 +623,148 @@ public class VipsBasedOperator extends BaseOperator
 		}
     	
     	return false;
+    }
+    
+    private boolean isMetVipsRule6(AreaImpl root)
+    {
+    	/*	
+    	 	If one of the child nodes of the DOM node has HTML tag <HR>, then divide this DOM node.
+    	 */
+    	
+    	for (Area child : root.getChildAreas())
+    	{
+    		if(child.getBoxes().get(0).getTagName().equals("hr"))
+    			return true;
+		}
+    	
+    	return false;
+    }
+    
+    private boolean isMetVipsRule7(AreaImpl root)
+    {
+    	/*	
+    	 	If the background color of this node is different from one of its children’s, divide this node and at the 
+			same time, the child node with different background color will not be divided in this round.  
+			Set the DoC value (0.6 - 0.8) for the child node based on the html tag of the child node and the size of the 
+			child node. 
+    	 */
+    	boolean ruleMet = false;
+    	
+    	for (Area child : root.getChildAreas())
+    	{
+    		if(child.getBackgroundColor() != root.getBackgroundColor())
+    		{
+    			ruleMet = true;
+    			nonDividableNodes.add((AreaImpl)child);
+    		}
+		}
+    	
+    	if(ruleMet)
+    		return true;
+    	else
+    		return false;
+    }
+    
+    private boolean isMetVipsRule8(AreaImpl root)
+    {	
+    	/* 	
+			If  the  node  has  at  least  one  text  node  child  or  at  least  one  virtual  text  node  child,  and  the  node's  
+			relative size is smaller than a threshold, then the node cannot be divided. 
+			Set the DoC value (from 0.5 - 0.8) based on the html tag of the node.
+		*/
+    	
+    	boolean isVirtual = true;
+    	//TODO: Implement DoC eval
+    	docValue = 0.5f;
+    	docValueIsKnown = true;
+    	
+    	for (Area child : root.getChildAreas())
+    	{
+    		//if child node is a text node
+			if(child.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
+			{
+				//TODO: implement threshold evaluation
+				return true;
+			}
+			//if child node is a virtual text node
+			else
+			{
+				for (Area virtualNodeChild : child.getChildAreas())
+				{
+					if(virtualNodeChild.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT)
+						isVirtual = false;
+				}
+				if(isVirtual)
+				{
+					//TODO: implement threshold evaluation
+					return true;
+				}
+			}
+		}
+    	
+    	return false;
+    }
+    
+    private boolean isMetVipsRule9(AreaImpl root)
+    {	
+    	/* 	
+			If the child of the node with maximum size is smaller than a threshold (relative size), do not divide this node. 
+			Set the DoC based on the html tag and size of this node.
+		*/
+    	
+    	int maxI = 0;
+    	int maxSize = 0;
+    	int i = 0;
+    	int size = 0;
+    	
+    	for (Area child : root.getChildAreas())
+    	{
+    		size = child.getWidth()*child.getHeight();
+    		if(size > maxSize)
+    		{
+    			maxSize = size;
+    			maxI = i;
+    		}
+    		
+    		i++;
+		}
+    	
+    	//TODO:Threshold of root.getChildArea(i)
+    	//TODO:Implement DoC evaluation
+    	return true;
+    }
+    
+    private boolean isMetVipsRule10(AreaImpl root)
+    {	
+    	/* 	
+			If previous sibling node has not been divided, do not divide this node.
+		*/
+    	
+    	if(!visualBlocksPool.contains(root.getPreviousSibling()))
+    		return true;
+    	else
+    		return false;
+    }
+    
+    private boolean isMetVipsRule11(AreaImpl root)
+    {	
+    	/* 	
+			Divide this node.
+		*/
+    	
+    	return true;
+    }
+    
+    private boolean isMetVipsRule12(AreaImpl root)
+    {	
+    	/* 	
+			Do not divide this node.
+			Set the DoC value based on the html tag and size of this node.
+		*/
+    	
+    	//TODO: set Doc
+    	
+    	return true;
     }
     
     private boolean isLineBreakNode(Area root)
