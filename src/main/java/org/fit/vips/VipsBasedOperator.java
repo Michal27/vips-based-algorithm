@@ -35,7 +35,6 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isNotValidNode = false;
     private boolean docValueIsKnown = false;
     private float docValue = 0;
-    private AreaTree defaultAreaTree = null;
     
     public VipsBasedOperator()
     {
@@ -96,21 +95,12 @@ public class VipsBasedOperator extends BaseOperator
     @Override
     public void apply(AreaTree atree)
     {
-    	defaultAreaTree = atree;
         performVipsAlgorithm((AreaImpl) atree.getRoot());
-        
     }
 
     @Override
     public void apply(AreaTree atree, Area root)
     {	
-    	/*System.out.println("Leaf Node In Progress: " + root.toString());
-    	for (Area child : root.getChildAreas())
-		{
-			System.out.println(child.toString());
-		}*/
-    	
-    	defaultAreaTree = atree;
     	performVipsAlgorithm((AreaImpl) root);
     }
     
@@ -458,69 +448,177 @@ public class VipsBasedOperator extends BaseOperator
     
     private boolean isVisualBlock(AreaImpl root)
     {
-    	//TODO: apply heuristic rules to root
-    	//TODO: begin here with splitting the rules applications to proper groups
+    	//TODO: apply advanced heuristic rules to root
+    	String tagName = root.getBoxes().get(0).getTagName();
+    	
+    	if(isInlineNode(root))
+    		return isVisualInline(root);
+    	else if(tagName != null && tagName.equals("table"))
+    		return isVisualTable(root);
+    	else if(tagName != null && tagName.equals("tr"))
+    		return isVisualTr(root);
+    	else if(tagName != null && tagName.equals("td"))
+    		return isVisualTd(root);
+    	else if(tagName != null && tagName.equals("p"))
+    		return isVisualP(root);
+    	else
+    		return isVisualOther(root);
+    }
+    
+    private boolean isVisualInline(AreaImpl root)
+    {
     	if(isMetVipsRule1(root))
     	{
     		isNotValidNode = true;
     		return false;
     	}
     	else if(isMetVipsRule2(root))
-    	{
     		return false;
-    	}
     	else if(isMetVipsRule3(root))
-    	{
 			return false;
-		}
     	else if(isMetVipsRule4(root))
-    	{
 			return true;
-		}
     	else if(isMetVipsRule5(root))
-    	{
     		return false;
-		}
     	else if(isMetVipsRule6(root))
-    	{
     		return false;
-		}
-    	else if(isMetVipsRule7(root))
-    	{
-    		return false;
-    	}
     	else if(isMetVipsRule8(root))
-    	{
     		return true;
-    	}
     	else if(isMetVipsRule9(root))
-    	{
     		return true;
-    	}
-    	else if(isMetVipsRule10(root))
-    	{
-    		return true;
-    	}
     	else if(isMetVipsRule11(root))
-    	{
     		return false;
-    	}
-    	else if(isMetVipsRule12(root))
-    	{
-    		return true;
-    	}
     	else
     		return false;
-    }
+	}
     
-    private boolean isMetVipsRule1(AreaImpl root)
+    private boolean isVisualTable(AreaImpl root)
     {
-    	/* If the DOM node is not a text node and it has no valid children, then this node cannot be divided and will be cut. */
+    	if(isMetVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
+    	else if(isMetVipsRule2(root))
+    		return false;
+    	else if(isMetVipsRule3(root))
+			return false;
+    	else if(isMetVipsRule7(root))
+    		return false;
+    	else if(isMetVipsRule9(root))
+    		return true;
+    	else if(isMetVipsRule12(root))
+    		return true;
+    	else
+    		return false;
+	}
+    
+    private boolean isVisualTr(AreaImpl root)
+    {
+    	if(isMetVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
+    	else if(isMetVipsRule2(root))
+    		return false;
+    	else if(isMetVipsRule3(root))
+			return false;
+    	else if(isMetVipsRule7(root))
+    		return false;
+    	else if(isMetVipsRule9(root))
+    		return true;
+    	else if(isMetVipsRule12(root))
+    		return true;
+    	else
+    		return false;
+	}
+    
+    private boolean isVisualTd(AreaImpl root)
+    {
+    	if(isMetVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
+    	else if(isMetVipsRule2(root))
+    		return false;
+    	else if(isMetVipsRule3(root))
+			return false;
+    	else if(isMetVipsRule4(root))
+			return true;
+    	else if(isMetVipsRule8(root))
+    		return true;
+    	else if(isMetVipsRule9(root))
+    		return true;
+    	else if(isMetVipsRule10(root))
+    		return true;
+    	else if(isMetVipsRule12(root))
+    		return true;
+    	else
+    		return false;
+	}
+    
+    private boolean isVisualP(AreaImpl root)
+    {
+    	if(isMetVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
+    	else if(isMetVipsRule2(root))
+    		return false;
+    	else if(isMetVipsRule3(root))
+			return false;
+    	else if(isMetVipsRule4(root))
+			return true;
+    	else if(isMetVipsRule5(root))
+    		return false;
+    	else if(isMetVipsRule6(root))
+    		return false;
+    	else if(isMetVipsRule8(root))
+    		return true;
+    	else if(isMetVipsRule9(root))
+    		return true;
+    	else if(isMetVipsRule11(root))
+    		return false;
+    	else
+    		return false;
+	}
+    
+    private boolean isVisualOther(AreaImpl root)
+    {
+    	if(isMetVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
+    	else if(isMetVipsRule2(root))
+    		return false;
+    	else if(isMetVipsRule3(root))
+			return false;
+    	else if(isMetVipsRule4(root))
+			return true;
+    	else if(isMetVipsRule6(root))
+    		return false;
+    	else if(isMetVipsRule8(root))
+    		return true;
+    	else if(isMetVipsRule9(root))
+    		return true;
+    	else if(isMetVipsRule11(root))
+    		return false;
+    	else
+    		return false;
+	}
+
+	private boolean isMetVipsRule1(AreaImpl root)
+    {
+    	/* If the DOM node is not a valid node and it has no valid children, then this node cannot be divided and will be cut. */
 			 
     	Box box = root.getBoxes().get(0);
     	
-    	//if the DOM node is not a text node
-    	if(box.getType() != Box.Type.TEXT_CONTENT)
+    	//if the DOM node is not a valid node
+    	if(root.getWidth() != 0 && root.getHeight() != 0)//TODO:check this condition
     	{
     		boolean noValidChild = true;
     		
@@ -618,7 +716,7 @@ public class VipsBasedOperator extends BaseOperator
     	
     	for (Area child : root.getChildAreas())
     	{
-    		if(isLineBreakNode(child))
+    		if(isLineBreakNode((AreaImpl)child))
     			return true;
 		}
     	
@@ -731,7 +829,7 @@ public class VipsBasedOperator extends BaseOperator
     	
     	//TODO:Threshold of root.getChildArea(i)
     	//TODO:Implement DoC evaluation
-    	return true;
+    	return false;
     }
     
     private boolean isMetVipsRule10(AreaImpl root)
@@ -767,27 +865,22 @@ public class VipsBasedOperator extends BaseOperator
     	return true;
     }
     
-    private boolean isLineBreakNode(Area root)
+    private boolean isInlineNode(AreaImpl root)
     {
     	String tagName = root.getBoxes().get(0).getTagName();
     	if(tagName == null)
     		return false;
     	
-    	//if the node isn't a inline element
-    	if(	//TODO: are these tag names correctly formated?
-    		!tagName.equals("b") && !tagName.equals("big") && !tagName.equals("i") && !tagName.equals("small") && 
-    		!tagName.equals("tt") && !tagName.equals("abbr") && !tagName.equals("acronym") && !tagName.equals("cite") &&
-    		!tagName.equals("code") && !tagName.equals("dfn") && !tagName.equals("em") && !tagName.equals("kbd") &&
-    		!tagName.equals("strong") && !tagName.equals("samp") && !tagName.equals("time") && !tagName.equals("var") &&
-    		!tagName.equals("a") && !tagName.equals("bdo") && !tagName.equals("br") && !tagName.equals("img") &&
-    		!tagName.equals("map") && !tagName.equals("object") && !tagName.equals("q") && !tagName.equals("script") &&
-    		!tagName.equals("span") && !tagName.equals("sub") && !tagName.equals("sup") && !tagName.equals("button") &&
-    		!tagName.equals("input") && !tagName.equals("label") && !tagName.equals("select") && !tagName.equals("textarea") &&
-    		!tagName.equals("u") && !tagName.equals("font")
-    	)
+    	//if the node is a inline text element
+    	if(tagName!=null && tagName.matches("b|big|i|small|tt|abbr|acronym|cite|code|dfn|em|kbd|strong|samp|time|var|a|bdo|q|span|sub|sup|label"))
     		return true;
     	else
 			return false;
+    }
+    
+    private boolean isLineBreakNode(AreaImpl root)
+    {
+    	return !isInlineNode(root);    	
     }
     
     private void collectSeparators(AreaImpl root)
@@ -915,7 +1008,7 @@ public class VipsBasedOperator extends BaseOperator
 						}
 						
 						VipsBasedOperator divideDomTree = new VipsBasedOperator(pdocValue);
-						divideDomTree.apply(defaultAreaTree, root);
+						divideDomTree.apply(null, root);
 					}
 					break;
 				}
