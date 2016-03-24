@@ -614,14 +614,15 @@ public class VipsBasedOperator extends BaseOperator
 	private boolean isMetVipsRule1(AreaImpl root)
     {
     	/* If the DOM node is not a valid node and it has no valid children, then this node cannot be divided and will be cut. */
-			 
+		
+		System.out.println("Processing VIPS Rule 1: " + root.toString());
+		
     	Box box = root.getBoxes().get(0);
+    	boolean noValidChild = true;
     	
     	//if the DOM node is not a valid node
-    	if(root.getWidth() != 0 && root.getHeight() != 0)//TODO:check this condition
+    	if(!box.isVisible())
     	{
-    		boolean noValidChild = true;
-    		
     		//and it has no valid children
 			for (Area child : root.getChildAreas())
     		{
@@ -641,6 +642,8 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isMetVipsRule2(AreaImpl root)
     {	
     	/* If the DOM node has only one valid child and the child is not a text node, then divide this node. */
+    	
+    	System.out.println("Processing VIPS Rule 2: " + root.toString());
     	
     	//has only one child
     	if(root.getChildCount() == 1)
@@ -664,6 +667,9 @@ public class VipsBasedOperator extends BaseOperator
     	 	If the DOM node is the root node of the sub-DOM tree (corresponding to the block),
     		and there is only one sub DOM tree corresponding to this block, divide this node.
     	 */
+    	
+    	System.out.println("Processing VIPS Rule 3: " + root.toString());
+    	
     	return false;
     }
     
@@ -675,9 +681,14 @@ public class VipsBasedOperator extends BaseOperator
 			Otherwise, set the DoC of this extracted block to 0.9.
 		*/
     	
+    	System.out.println("Processing VIPS Rule 4: " + root.toString());
+    	
     	float previousNodeWeight = 0;
     	float previousNodeSize = 0;
     	docValue = 0.9f;
+    	
+    	if(root.getChildCount() == 0)
+    		return false;
     	
     	for (Area child : root.getChildAreas())
     	{
@@ -713,6 +724,7 @@ public class VipsBasedOperator extends BaseOperator
     	/*	
     	 	If one of the child nodes of the DOM node is line-break node, then divide this DOM node.
     	 */
+    	System.out.println("Processing VIPS Rule 5: " + root.toString());
     	
     	for (Area child : root.getChildAreas())
     	{
@@ -728,10 +740,14 @@ public class VipsBasedOperator extends BaseOperator
     	/*	
     	 	If one of the child nodes of the DOM node has HTML tag <HR>, then divide this DOM node.
     	 */
+    	System.out.println("Processing VIPS Rule 6: " + root.toString());
+    	
+    	Box childBox = null;
     	
     	for (Area child : root.getChildAreas())
     	{
-    		if(child.getBoxes().get(0).getTagName().equals("hr"))
+    		childBox = child.getBoxes().get(0);
+    		if(childBox.getTagName() != null && childBox.getTagName().equals("hr"))
     			return true;
 		}
     	
@@ -746,6 +762,8 @@ public class VipsBasedOperator extends BaseOperator
 			Set the DoC value (0.6 - 0.8) for the child node based on the html tag of the child node and the size of the 
 			child node. 
     	 */
+    	System.out.println("Processing VIPS Rule 7: " + root.toString());
+    	
     	boolean ruleMet = false;
     	
     	for (Area child : root.getChildAreas())
@@ -770,6 +788,7 @@ public class VipsBasedOperator extends BaseOperator
 			relative size is smaller than a threshold, then the node cannot be divided. 
 			Set the DoC value (from 0.5 - 0.8) based on the html tag of the node.
 		*/
+    	System.out.println("Processing VIPS Rule 8: " + root.toString());
     	
     	boolean isVirtual = true;
     	//TODO: Implement DoC eval
@@ -782,7 +801,7 @@ public class VipsBasedOperator extends BaseOperator
 			if(child.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
 			{
 				//TODO: implement threshold evaluation
-				return true;
+				//return true;
 			}
 			//if child node is a virtual text node
 			else
@@ -795,7 +814,7 @@ public class VipsBasedOperator extends BaseOperator
 				if(isVirtual)
 				{
 					//TODO: implement threshold evaluation
-					return true;
+					//return true;
 				}
 			}
 		}
@@ -809,6 +828,7 @@ public class VipsBasedOperator extends BaseOperator
 			If the child of the node with maximum size is smaller than a threshold (relative size), do not divide this node. 
 			Set the DoC based on the html tag and size of this node.
 		*/
+    	System.out.println("Processing VIPS Rule 9: " + root.toString());
     	
     	int maxI = 0;
     	int maxSize = 0;
@@ -837,6 +857,7 @@ public class VipsBasedOperator extends BaseOperator
     	/* 	
 			If previous sibling node has not been divided, do not divide this node.
 		*/
+    	System.out.println("Processing VIPS Rule 10: " + root.toString());
     	
     	if(!visualBlocksPool.contains(root.getPreviousSibling()))
     		return true;
@@ -849,6 +870,7 @@ public class VipsBasedOperator extends BaseOperator
     	/* 	
 			Divide this node.
 		*/
+    	System.out.println("Processing VIPS Rule 11: " + root.toString());
     	
     	return true;
     }
@@ -859,6 +881,7 @@ public class VipsBasedOperator extends BaseOperator
 			Do not divide this node.
 			Set the DoC value based on the html tag and size of this node.
 		*/
+    	System.out.println("Processing VIPS Rule 12: " + root.toString());
     	
     	//TODO: set Doc
     	
