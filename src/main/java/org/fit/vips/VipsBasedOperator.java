@@ -449,7 +449,16 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isVisualBlock(AreaImpl root)
     {
     	//TODO: apply advanced heuristic rules to root
-    	String tagName = root.getBoxes().get(0).getTagName();
+    	
+    	String tagName = null;
+    	if(root.getBoxes().size() != 0)
+    		tagName = root.getBoxes().get(0).getTagName();
+    	
+    	if(isMetImprovedVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
     	
     	if(isInlineNode(root))
     		return isVisualInline(root);
@@ -465,7 +474,78 @@ public class VipsBasedOperator extends BaseOperator
     		return isVisualOther(root);
     }
     
-    private boolean isVisualInline(AreaImpl root)
+    private boolean isMetImprovedVipsRule1(AreaImpl root)
+    {
+		/*
+		  	If one of the child nodes has bigger font size than its previous siblings, divide node
+			into two blocks. Put the nodes before the child node with bigger font size into the
+			first block, and put the remaining nodes to the second block.
+		 */
+    	Area child = null;
+    	
+    	for (int i = 0; i < root.getChildCount(); i++)
+    	{
+    		child = root.getChildArea(i);
+    		
+    		//first child doesn't have previous sibling
+			if(child.getPreviousSibling() != null)
+			{
+				//if child and previous sibling child are both text nodes
+				if((isTextNode(child) && isTextNode(child.getPreviousSibling())) || (isVirtualTextNode(child) && isVirtualTextNode(child.getPreviousSibling())))
+				{
+					if(child.getFontSize() > child.getPreviousSibling().getFontSize())
+					{
+						AreaImpl newNode1 = new AreaImpl(0,0,0,0);
+						AreaImpl newNode2 = new AreaImpl(0,0,0,0);
+						newNode1.addBox(root.getBoxes().get(0));
+						newNode2.addBox(root.getBoxes().get(0));//TODO: reimplement this like that: the pair of two new nodes will be not added like next siblings of root, but will be the only childs of root and then the root proceeding will continue
+						
+						for (int j = 0; j < root.getChildCount(); j++)
+						{
+							if(j < i)
+							{
+								System.out.println("TADY1");
+								newNode1.appendChild(root.getChildArea(j).copy());
+							}
+							else
+							{
+								System.out.println("TADY2");
+								newNode2.appendChild(root.getChildArea(j).copy());
+							}
+						}
+						
+						root.getParentArea().insertChild(newNode1, root.getParentArea().getIndex(root)+1);
+						root.getParentArea().insertChild(newNode2, root.getParentArea().getIndex(root)+2);
+						
+						System.out.println("SPLITING THIS NODE:" + root + "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+						printCreatedSubtree((AreaImpl)root.getParentArea(), 0);
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	private boolean isTextNode(Area node)
+	{
+		if(node.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
+			return true;
+		else
+			return false;
+	}
+
+	private boolean isVirtualTextNode(Area node)
+	{
+		for (Area child : node.getChildAreas())
+		{
+			if(child.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT)
+				return false;
+		}
+		return true;
+	}
+
+	private boolean isVisualInline(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
     	{
@@ -890,7 +970,10 @@ public class VipsBasedOperator extends BaseOperator
     
     private boolean isInlineNode(AreaImpl root)
     {
-    	String tagName = root.getBoxes().get(0).getTagName();
+    	String tagName = null;
+    	if(root.getBoxes().size() != 0)
+    		tagName = root.getBoxes().get(0).getTagName();
+    	
     	if(tagName == null)
     		return false;
     	
