@@ -211,31 +211,7 @@ public class VipsBasedOperator extends BaseOperator
 				}
         		
         		//update bounds of the newNode
-        		for (int i = 0; i < newNode.getChildCount(); i++)
-        		{
-        			Area child = newNode.getChildArea(i);
-        			Rectangular bounds = newNode.getBounds();
-        			
-					if(i == 0)
-					{
-						bounds.setX1(child.getX1());
-						bounds.setY1(child.getY1());
-						newNode.setBounds(bounds);
-					}
-					else
-					{
-						if(child.getX1() < bounds.getX1())
-						{
-							bounds.setX1(child.getX1());
-							newNode.setBounds(bounds);
-						}
-						if(child.getY1() < bounds.getY1())
-						{
-							bounds.setY1(child.getY1());
-							newNode.setBounds(bounds);
-						}
-					}
-				}
+        		updateBounds(newNode);
         		
         		//update adjacent areas of remaining separators
         		for (VipsBasedSeparator separator : detectedSeparators)
@@ -291,7 +267,57 @@ public class VipsBasedOperator extends BaseOperator
     	processLeafNodes(root);
     }
     
-    private List<AreaImpl> processUnusedSubtrees(AreaImpl root, List<AreaImpl> subtrees)
+    private void updateBounds(AreaImpl newNode)
+    {
+    	for (int i = 0; i < newNode.getChildCount(); i++)
+		{
+			Area child = newNode.getChildArea(i);
+			Rectangular bounds = newNode.getBounds();
+			
+			if(i == 0)
+			{
+				bounds.setX1(child.getX1());
+				bounds.setY1(child.getY1());
+				newNode.setBounds(bounds);
+			}
+			else
+			{
+				if(child.getX1() < bounds.getX1())
+				{
+					bounds.setX1(child.getX1());
+					newNode.setBounds(bounds);
+				}
+				if(child.getY1() < bounds.getY1())
+				{
+					bounds.setY1(child.getY1());
+					newNode.setBounds(bounds);
+				}
+			}
+		}
+	}
+    
+    private void updateBounds(Rectangular rec1, List<Area> selected1)
+	{
+    	for (int i = 0; i < selected1.size(); i++)
+		{
+			Area child = selected1.get(i);
+			
+			if(i == 0)
+			{
+				rec1.setX1(child.getX1());
+				rec1.setY1(child.getY1());
+			}
+			else
+			{
+				if(child.getX1() < rec1.getX1())
+					rec1.setX1(child.getX1());
+				if(child.getY1() < rec1.getY1())
+					rec1.setY1(child.getY1());
+			}
+		}
+	}
+
+	private List<AreaImpl> processUnusedSubtrees(AreaImpl root, List<AreaImpl> subtrees)
     {
     	Collections.reverse(subtrees);
     	AreaImpl lastIntersectingArea = null;
@@ -386,42 +412,47 @@ public class VipsBasedOperator extends BaseOperator
     	}
     	else //is a visual block
     	{ 	
-			VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
-    		
-			if(root.getBoxes() != null && root.getBoxes().size() != 0)
-				visualBlock.setBlock(root.getBoxes().firstElement());
-			else
-				visualBlock.setBlock(null);
-			
-			visualBlock.setArea(root);
-			visualBlock.setDomNode(root);
-			
-			if(docValueIsKnown)
-			{
-				visualBlock.setDoc(docValue);
-				docValueIsKnown = false;
-			}
-			else
-			{
-				//this is for Vips rule 7
-				for (AreaImpl nonDividableNode : nonDividableNodes)
-				{
-					if(nonDividableNode == root)
-					{
-						visualBlock.setDoc(nonDividableNodeDocEvaluation(root));
-						visualBlocksPool.add(visualBlock);
-						return;
-					}
-				}
-				
-				visualBlock.setDoc(docEvaluation(root));
-			}
-			
-			visualBlocksPool.add(visualBlock); //add visual block to pool
+			createNewVisualBlock(root);
 		}
     }
     
-    private float docEvaluation(AreaImpl root) {
+    private void createNewVisualBlock(AreaImpl root)
+    {
+    	VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
+		
+		if(root.getBoxes() != null && root.getBoxes().size() != 0)
+			visualBlock.setBlock(root.getBoxes().firstElement());
+		else
+			visualBlock.setBlock(null);
+		
+		visualBlock.setArea(root);
+		visualBlock.setDomNode(root);
+		
+		if(docValueIsKnown)
+		{
+			visualBlock.setDoc(docValue);
+			docValueIsKnown = false;
+		}
+		else
+		{
+			//this is for Vips rule 7
+			for (AreaImpl nonDividableNode : nonDividableNodes)
+			{
+				if(nonDividableNode == root)
+				{
+					visualBlock.setDoc(nonDividableNodeDocEvaluation(root));
+					visualBlocksPool.add(visualBlock);
+					return;
+				}
+			}
+			
+			visualBlock.setDoc(docEvaluation(root));
+		}
+		
+		visualBlocksPool.add(visualBlock); //add visual block to pool
+	}
+
+	private float docEvaluation(AreaImpl root) {
     	//TODO: DoC evaluation of visualBlock
 		return 0;
 	}
@@ -454,11 +485,7 @@ public class VipsBasedOperator extends BaseOperator
     	if(root.getBoxes().size() != 0)
     		tagName = root.getBoxes().get(0).getTagName();
     	
-    	if(isMetImprovedVipsRule1(root))
-    	{
-    		isNotValidNode = true;
-    		return false;
-    	}
+    	
     	
     	if(isInlineNode(root))
     		return isVisualInline(root);
@@ -491,40 +518,129 @@ public class VipsBasedOperator extends BaseOperator
 			if(child.getPreviousSibling() != null)
 			{
 				//if child and previous sibling child are both text nodes
-				if((isTextNode(child) && isTextNode(child.getPreviousSibling())) || (isVirtualTextNode(child) && isVirtualTextNode(child.getPreviousSibling())))
+				if((isTextNode(child) || isVirtualTextNode(child)) && (isTextNode(child.getPreviousSibling()) || isVirtualTextNode(child.getPreviousSibling())))
 				{
 					if(child.getFontSize() > child.getPreviousSibling().getFontSize())
 					{
 						AreaImpl newNode1 = new AreaImpl(0,0,0,0);
 						AreaImpl newNode2 = new AreaImpl(0,0,0,0);
 						newNode1.addBox(root.getBoxes().get(0));
-						newNode2.addBox(root.getBoxes().get(0));//TODO: reimplement this like that: the pair of two new nodes will be not added like next siblings of root, but will be the only childs of root and then the root proceeding will continue
+						newNode2.addBox(root.getBoxes().get(0));
+						List<Area> selected1 = new ArrayList<Area>();
+						List<Area> selected2 = new ArrayList<Area>();
 						
 						for (int j = 0; j < root.getChildCount(); j++)
 						{
 							if(j < i)
 							{
 								System.out.println("TADY1");
-								newNode1.appendChild(root.getChildArea(j).copy());
+								selected1.add(root.getChildArea(j));
 							}
 							else
 							{
 								System.out.println("TADY2");
-								newNode2.appendChild(root.getChildArea(j).copy());
+								selected2.add(root.getChildArea(j));
 							}
 						}
 						
-						root.getParentArea().insertChild(newNode1, root.getParentArea().getIndex(root)+1);
-						root.getParentArea().insertChild(newNode2, root.getParentArea().getIndex(root)+2);
+						for (Area subArea : selected1)
+						{
+							newNode1.appendChild(subArea);
+						}
+						for (Area subArea : selected2)
+						{
+							newNode2.appendChild(subArea);
+						}
 						
-						System.out.println("SPLITING THIS NODE:" + root + "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+						updateBounds(newNode1);
+						updateBounds(newNode2);
+						
+						root.appendChild(newNode1);
+						root.appendChild(newNode2);
+						System.out.println(detectedSeparators.size());
+						collectActualSeparators(root);System.out.println(detectedSeparators.size());
+						
+						createNewVisualBlock(newNode1);
+						createNewVisualBlock(newNode2);
+						reconfigureSeparators(root);
+						
 						printCreatedSubtree((AreaImpl)root.getParentArea(), 0);
 						return true;
 					}
 				}
 			}
 		}
-		return false;
+    	return false;
+	}
+    
+    private void checkImprovedVipsRule2(AreaImpl root)
+    {
+		/*
+		  	If the first child of the node has bigger font size than the remaining children,
+		  	divide node into two blocks, one in which is the first child with bigger font size, and the other
+			contains remaining children.
+		 */
+    	Area firstChild = null;
+    	Area child = null;
+    	
+    	if(root.getChildCount() != 0)
+    		firstChild = root.getChildArea(0);
+    	//TODO:Start here: reimplement statement to match the rule description
+    	/*for (int i = 0; i < root.getChildCount(); i++)
+    	{
+    		child = root.getChildArea(i);
+    		
+    		//first child doesn't have previous sibling
+			if(child.getPreviousSibling() != null)
+			{
+				//if child and previous sibling child are both text nodes
+				if((isTextNode(child) || isVirtualTextNode(child)) && (isTextNode(child.getPreviousSibling()) || isVirtualTextNode(child.getPreviousSibling())))
+				{
+					if(child.getFontSize() > child.getPreviousSibling().getFontSize())
+					{
+						AreaImpl newNode1 = new AreaImpl(0,0,0,0);
+						AreaImpl newNode2 = new AreaImpl(0,0,0,0);
+						newNode1.addBox(root.getBoxes().get(0));
+						newNode2.addBox(root.getBoxes().get(0));
+						List<Area> selected1 = new ArrayList<Area>();
+						List<Area> selected2 = new ArrayList<Area>();
+						
+						for (int j = 0; j < root.getChildCount(); j++)
+						{
+							if(j == 0)
+							{
+								System.out.println("TADY1");
+								selected1.add(root.getChildArea(j));
+							}
+							else
+							{
+								System.out.println("TADY2");
+								selected2.add(root.getChildArea(j));
+							}
+						}
+						
+						for (Area subArea : selected1)
+						{
+							newNode1.appendChild(subArea);
+						}
+						for (Area subArea : selected2)
+						{
+							newNode2.appendChild(subArea);
+						}
+						
+						updateBounds(newNode1);
+						updateBounds(newNode2);
+						
+						root.appendChild(newNode1);
+						root.appendChild(newNode2);
+						
+						collectSeparators(root);
+						
+						printCreatedSubtree((AreaImpl)root.getParentArea(), 0);
+					}
+				}
+			}
+		}*/
 	}
 
 	private boolean isTextNode(Area node)
@@ -556,6 +672,11 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
+    	else if(isMetImprovedVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule5(root))
@@ -625,6 +746,11 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
+    	else if(isMetImprovedVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule8(root))
@@ -650,6 +776,11 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
+    	else if(isMetImprovedVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule5(root))
@@ -677,6 +808,11 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
+    	else if(isMetImprovedVipsRule1(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule6(root))
@@ -1009,13 +1145,15 @@ public class VipsBasedOperator extends BaseOperator
     	{
     		//System.out.println("Horizontal separator");
     		vipsSeparator = new VipsBasedSeparator(separator);
-    		detectedSeparators.add(vipsSeparator);
+    		//if(!detectedSeparators.contains(vipsSeparator))
+    			detectedSeparators.add(vipsSeparator);
 		}
     	for (Separator separator : actualLevelSeparators.getVertical())
     	{
     		//System.out.println("Vertical separator");
     		vipsSeparator = new VipsBasedSeparator(separator);
-    		detectedSeparators.add(vipsSeparator);
+    		//if(!detectedSeparators.contains(vipsSeparator))
+    			detectedSeparators.add(vipsSeparator);
 		}
     }
     
