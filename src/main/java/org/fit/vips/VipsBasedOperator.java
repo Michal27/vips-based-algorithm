@@ -35,6 +35,7 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isNotValidNode = false;
     private boolean docValueIsKnown = false;
     private float docValue = 0;
+    private boolean printRules = false;
     
     public VipsBasedOperator()
     {
@@ -157,6 +158,7 @@ public class VipsBasedOperator extends BaseOperator
     {
     	List<AreaImpl> createdSubtrees = new ArrayList<AreaImpl>();
     	List<AreaImpl> rootChilds = new ArrayList<AreaImpl>();
+    	Boolean notValidArea = false;
     	
     	for (VipsBasedVisualBlock visualBlock  : visualBlocksPool)
     	{
@@ -212,6 +214,24 @@ public class VipsBasedOperator extends BaseOperator
         		
         		//update bounds of the newNode
         		updateBounds(newNode);
+        		
+        		//remove area, which is crossing with another area
+        		if(actualSeparator.getType() == Separator.HORIZONTAL)
+        		{
+        			for (AreaImpl subTree : createdSubtrees)
+            		{
+    					if(newNode.getBounds().intersects(subTree.getBounds()) && !newNode.getBounds().encloses(subTree.getBounds()))
+    					{
+    						notValidArea = true;
+    						break;
+    					}
+    				}
+        			if(notValidArea)
+        			{
+        				notValidArea = false;
+        				continue;
+        			}
+        		}
         		
         		//update adjacent areas of remaining separators
         		for (VipsBasedSeparator separator : detectedSeparators)
@@ -292,27 +312,6 @@ public class VipsBasedOperator extends BaseOperator
 					bounds.setY1(child.getY1());
 					newNode.setBounds(bounds);
 				}
-			}
-		}
-	}
-    
-    private void updateBounds(Rectangular rec1, List<Area> selected1)
-	{
-    	for (int i = 0; i < selected1.size(); i++)
-		{
-			Area child = selected1.get(i);
-			
-			if(i == 0)
-			{
-				rec1.setX1(child.getX1());
-				rec1.setY1(child.getY1());
-			}
-			else
-			{
-				if(child.getX1() < rec1.getX1())
-					rec1.setX1(child.getX1());
-				if(child.getY1() < rec1.getY1())
-					rec1.setY1(child.getY1());
 			}
 		}
 	}
@@ -412,7 +411,10 @@ public class VipsBasedOperator extends BaseOperator
     	}
     	else //is a visual block
     	{ 	
-			createNewVisualBlock(root);
+    		if(!isNotValidNode)
+    			createNewVisualBlock(root);
+    		else
+    			isNotValidNode = false;
 		}
     }
     
@@ -485,8 +487,6 @@ public class VipsBasedOperator extends BaseOperator
     	if(root.getBoxes().size() != 0)
     		tagName = root.getBoxes().get(0).getTagName();
     	
-    	
-    	
     	if(isInlineNode(root))
     		return isVisualInline(root);
     	else if(tagName != null && tagName.equals("table"))
@@ -500,166 +500,6 @@ public class VipsBasedOperator extends BaseOperator
     	else
     		return isVisualOther(root);
     }
-    
-    private boolean isMetImprovedVipsRule1(AreaImpl root)
-    {
-		/*
-		  	If one of the child nodes has bigger font size than its previous siblings, divide node
-			into two blocks. Put the nodes before the child node with bigger font size into the
-			first block, and put the remaining nodes to the second block.
-		 */
-    	Area child = null;
-    	
-    	for (int i = 0; i < root.getChildCount(); i++)
-    	{
-    		child = root.getChildArea(i);
-    		
-    		//first child doesn't have previous sibling
-			if(child.getPreviousSibling() != null)
-			{
-				//if child and previous sibling child are both text nodes
-				if((isTextNode(child) || isVirtualTextNode(child)) && (isTextNode(child.getPreviousSibling()) || isVirtualTextNode(child.getPreviousSibling())))
-				{
-					if(child.getFontSize() > child.getPreviousSibling().getFontSize())
-					{
-						AreaImpl newNode1 = new AreaImpl(0,0,0,0);
-						AreaImpl newNode2 = new AreaImpl(0,0,0,0);
-						newNode1.addBox(root.getBoxes().get(0));
-						newNode2.addBox(root.getBoxes().get(0));
-						List<Area> selected1 = new ArrayList<Area>();
-						List<Area> selected2 = new ArrayList<Area>();
-						
-						for (int j = 0; j < root.getChildCount(); j++)
-						{
-							if(j < i)
-							{
-								System.out.println("TADY1");
-								selected1.add(root.getChildArea(j));
-							}
-							else
-							{
-								System.out.println("TADY2");
-								selected2.add(root.getChildArea(j));
-							}
-						}
-						
-						for (Area subArea : selected1)
-						{
-							newNode1.appendChild(subArea);
-						}
-						for (Area subArea : selected2)
-						{
-							newNode2.appendChild(subArea);
-						}
-						
-						updateBounds(newNode1);
-						updateBounds(newNode2);
-						
-						root.appendChild(newNode1);
-						root.appendChild(newNode2);
-						System.out.println(detectedSeparators.size());
-						collectActualSeparators(root);System.out.println(detectedSeparators.size());
-						
-						createNewVisualBlock(newNode1);
-						createNewVisualBlock(newNode2);
-						reconfigureSeparators(root);
-						
-						printCreatedSubtree((AreaImpl)root.getParentArea(), 0);
-						return true;
-					}
-				}
-			}
-		}
-    	return false;
-	}
-    
-    private void checkImprovedVipsRule2(AreaImpl root)
-    {
-		/*
-		  	If the first child of the node has bigger font size than the remaining children,
-		  	divide node into two blocks, one in which is the first child with bigger font size, and the other
-			contains remaining children.
-		 */
-    	Area firstChild = null;
-    	Area child = null;
-    	
-    	if(root.getChildCount() != 0)
-    		firstChild = root.getChildArea(0);
-    	//TODO:Start here: reimplement statement to match the rule description
-    	/*for (int i = 0; i < root.getChildCount(); i++)
-    	{
-    		child = root.getChildArea(i);
-    		
-    		//first child doesn't have previous sibling
-			if(child.getPreviousSibling() != null)
-			{
-				//if child and previous sibling child are both text nodes
-				if((isTextNode(child) || isVirtualTextNode(child)) && (isTextNode(child.getPreviousSibling()) || isVirtualTextNode(child.getPreviousSibling())))
-				{
-					if(child.getFontSize() > child.getPreviousSibling().getFontSize())
-					{
-						AreaImpl newNode1 = new AreaImpl(0,0,0,0);
-						AreaImpl newNode2 = new AreaImpl(0,0,0,0);
-						newNode1.addBox(root.getBoxes().get(0));
-						newNode2.addBox(root.getBoxes().get(0));
-						List<Area> selected1 = new ArrayList<Area>();
-						List<Area> selected2 = new ArrayList<Area>();
-						
-						for (int j = 0; j < root.getChildCount(); j++)
-						{
-							if(j == 0)
-							{
-								System.out.println("TADY1");
-								selected1.add(root.getChildArea(j));
-							}
-							else
-							{
-								System.out.println("TADY2");
-								selected2.add(root.getChildArea(j));
-							}
-						}
-						
-						for (Area subArea : selected1)
-						{
-							newNode1.appendChild(subArea);
-						}
-						for (Area subArea : selected2)
-						{
-							newNode2.appendChild(subArea);
-						}
-						
-						updateBounds(newNode1);
-						updateBounds(newNode2);
-						
-						root.appendChild(newNode1);
-						root.appendChild(newNode2);
-						
-						collectSeparators(root);
-						
-						printCreatedSubtree((AreaImpl)root.getParentArea(), 0);
-					}
-				}
-			}
-		}*/
-	}
-
-	private boolean isTextNode(Area node)
-	{
-		if(node.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
-			return true;
-		else
-			return false;
-	}
-
-	private boolean isVirtualTextNode(Area node)
-	{
-		for (Area child : node.getChildAreas())
-		{
-			if(child.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT)
-				return false;
-		}
-		return true;
-	}
 
 	private boolean isVisualInline(AreaImpl root)
     {
@@ -672,11 +512,6 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
-    	else if(isMetImprovedVipsRule1(root))
-    	{
-    		isNotValidNode = true;
-    		return false;
-    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule5(root))
@@ -746,11 +581,6 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
-    	else if(isMetImprovedVipsRule1(root))
-    	{
-    		isNotValidNode = true;
-    		return false;
-    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule8(root))
@@ -776,11 +606,6 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
-    	else if(isMetImprovedVipsRule1(root))
-    	{
-    		isNotValidNode = true;
-    		return false;
-    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule5(root))
@@ -808,11 +633,6 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetVipsRule3(root))
 			return false;
-    	else if(isMetImprovedVipsRule1(root))
-    	{
-    		isNotValidNode = true;
-    		return false;
-    	}
     	else if(isMetVipsRule4(root))
 			return true;
     	else if(isMetVipsRule6(root))
@@ -831,7 +651,8 @@ public class VipsBasedOperator extends BaseOperator
     {
     	/* If the DOM node is not a valid node and it has no valid children, then this node cannot be divided and will be cut. */
 		
-		System.out.println("Processing VIPS Rule 1: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 1: " + root.toString());
 		
     	Box box = root.getBoxes().get(0);
     	boolean noValidChild = true;
@@ -858,8 +679,9 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isMetVipsRule2(AreaImpl root)
     {	
     	/* If the DOM node has only one valid child and the child is not a text node, then divide this node. */
-    	
-    	System.out.println("Processing VIPS Rule 2: " + root.toString());
+
+		if(printRules)
+			System.out.println("Processing VIPS Rule 2: " + root.toString());
     	
     	//has only one child
     	if(root.getChildCount() == 1)
@@ -883,40 +705,83 @@ public class VipsBasedOperator extends BaseOperator
     	 	If the DOM node is the root node of the sub-DOM tree (corresponding to the block),
     		and there is only one sub DOM tree corresponding to this block, divide this node.
     	 */
-    	
-    	System.out.println("Processing VIPS Rule 3: " + root.toString());
+
+		if(printRules)
+			System.out.println("Processing VIPS Rule 3: " + root.toString());
     	
     	return false;
     }
+    
+    private boolean isTextNode(Area node)
+	{
+		if(node.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
+			return true;
+		else
+			return false;
+	}
+
+	private boolean isVirtualTextNode(Area node)
+	{
+		for (Area child : node.getChildAreas())
+		{	
+			//if child is not a text node
+			if(!isTextNode(child))
+			{
+				//all child nodes of child must be text nodes
+				for (Area grandChild : child.getChildAreas())
+				{
+					//if grandChild is not text node
+					if(!isTextNode(grandChild))
+					{
+						/*//if grandChild is the only child node of child
+						if(child.getChildCount() == 1)
+						{
+							//and if grandChild and child have the same coordinates
+							if(child.getX1() == grandChild.getX1() && child.getX2() == grandChild.getX2() && child.getY1() == grandChild.getY1() && child.getY2() == grandChild.getY2())
+							{
+								//proceed grandChild's child nodes instead of child's child nodes
+								for (Area grandGrandChild : grandChild.getChildAreas())
+								{
+									if(!isTextNode(grandGrandChild))
+										return false;
+								}
+							}
+							else return false;
+						}
+						else return false;*/
+						return false;
+					}
+				}
+			}
+		}
+		return true;
+	}
     
     private boolean isMetVipsRule4(AreaImpl root)
     {	
     	/* 	
 			If all of the child nodes of the DOM node are text nodes or virtual text nodes, do not divide the node.  
-			If the font size and font weight of all these child nodes are same, set the DoC of the extracted block to 1. 
-			Otherwise, set the DoC of this extracted block to 0.9.
+			If the font size and font weight of all these child nodes are same, set the DoC of the extracted block to 1.
+			Else if only the font size isn't same for all children proceed improvedVipsRule1 or improvedVipsRule2.
+			Else if only the font weight isn't same for all children set DoC of the extracted block to 0.9.
 		*/
-    	
-    	System.out.println("Processing VIPS Rule 4: " + root.toString());
+
+		if(printRules)
+			System.out.println("Processing VIPS Rule 4: " + root.toString());
     	
     	float previousNodeWeight = 0;
     	float previousNodeSize = 0;
-    	docValue = 0.9f;
+    	boolean proceedImprovedVipsRules = false;
+    	docValue = 1f;
     	
     	if(root.getChildCount() == 0)
     		return false;
     	
     	for (Area child : root.getChildAreas())
     	{
-			if(child.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT) //if child node isn't a text node
-			{
-				for (Area virtualNodeChild : child.getChildAreas())
-				{
-					if(virtualNodeChild.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT) //if child node isn't even a virtual text node
-						return false;
-				}
-			}
-			
+			if(!isTextNode(child) && !isVirtualTextNode(child)) //if child node isn't a text node even a virtual text node
+				return false;
+
 			//font size and font weight comparison
 			if(child == root.getChildAreas().get(0))
 			{
@@ -925,11 +790,32 @@ public class VipsBasedOperator extends BaseOperator
 			}
 			else
 			{
+				if(Float.compare(previousNodeSize, child.getFontSize()) != 0)
+				{
+					proceedImprovedVipsRules = true;
+					docValue = 0.9f;
+				}
 				if(Float.compare(previousNodeWeight, child.getFontWeight()) != 0)
-					if(Float.compare(previousNodeSize, child.getFontSize()) != 0)
-						docValue = 1f;
+				{
+					docValue = 0.9f;
+				}
 			}
 		}
+    	
+    	if(proceedImprovedVipsRules)
+    	{
+    		System.out.println("");System.out.println("TADYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY");System.out.println("");
+    		if(isMetImprovedVipsRule1(root))
+    		{
+        		isNotValidNode = true;
+        		return true;
+        	}
+    		else if(isMetImprovedVipsRule2(root))
+    		{
+        		isNotValidNode = true;
+        		return true;
+        	}
+    	}
     	
     	docValueIsKnown = true;
     	return true;
@@ -940,7 +826,8 @@ public class VipsBasedOperator extends BaseOperator
     	/*	
     	 	If one of the child nodes of the DOM node is line-break node, then divide this DOM node.
     	 */
-    	System.out.println("Processing VIPS Rule 5: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 5: " + root.toString());
     	
     	for (Area child : root.getChildAreas())
     	{
@@ -956,7 +843,8 @@ public class VipsBasedOperator extends BaseOperator
     	/*	
     	 	If one of the child nodes of the DOM node has HTML tag <HR>, then divide this DOM node.
     	 */
-    	System.out.println("Processing VIPS Rule 6: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 6: " + root.toString());
     	
     	Box childBox = null;
     	
@@ -978,7 +866,8 @@ public class VipsBasedOperator extends BaseOperator
 			Set the DoC value (0.6 - 0.8) for the child node based on the html tag of the child node and the size of the 
 			child node. 
     	 */
-    	System.out.println("Processing VIPS Rule 7: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 7: " + root.toString());
     	
     	boolean ruleMet = false;
     	
@@ -1004,7 +893,8 @@ public class VipsBasedOperator extends BaseOperator
 			relative size is smaller than a threshold, then the node cannot be divided. 
 			Set the DoC value (from 0.5 - 0.8) based on the html tag of the node.
 		*/
-    	System.out.println("Processing VIPS Rule 8: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 8: " + root.toString());
     	
     	boolean isVirtual = true;
     	//TODO: Implement DoC eval
@@ -1044,7 +934,8 @@ public class VipsBasedOperator extends BaseOperator
 			If the child of the node with maximum size is smaller than a threshold (relative size), do not divide this node. 
 			Set the DoC based on the html tag and size of this node.
 		*/
-    	System.out.println("Processing VIPS Rule 9: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 9: " + root.toString());
     	
     	int maxI = 0;
     	int maxSize = 0;
@@ -1073,7 +964,8 @@ public class VipsBasedOperator extends BaseOperator
     	/* 	
 			If previous sibling node has not been divided, do not divide this node.
 		*/
-    	System.out.println("Processing VIPS Rule 10: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 10: " + root.toString());
     	
     	if(!visualBlocksPool.contains(root.getPreviousSibling()))
     		return true;
@@ -1086,7 +978,8 @@ public class VipsBasedOperator extends BaseOperator
     	/* 	
 			Divide this node.
 		*/
-    	System.out.println("Processing VIPS Rule 11: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 11: " + root.toString());
     	
     	return true;
     }
@@ -1097,12 +990,128 @@ public class VipsBasedOperator extends BaseOperator
 			Do not divide this node.
 			Set the DoC value based on the html tag and size of this node.
 		*/
-    	System.out.println("Processing VIPS Rule 12: " + root.toString());
+		if(printRules)
+			System.out.println("Processing VIPS Rule 12: " + root.toString());
     	
     	//TODO: set Doc
     	
     	return true;
     }
+    
+    private boolean isMetImprovedVipsRule1(AreaImpl root)
+    {
+		/*
+		  	If one of the child nodes has bigger font size than its previous siblings, divide node
+			into two blocks. Put the nodes before the child node with bigger font size into the
+			first block, and put the remaining nodes to the second block.
+		 */
+    	Area child = null;
+    	
+    	for (int i = 0; i < root.getChildCount(); i++)
+    	{
+    		child = root.getChildArea(i);
+    		
+    		//first child doesn't have previous sibling
+			if(child.getPreviousSibling() != null)
+			{
+				if(child.getFontSize() > child.getPreviousSibling().getFontSize())
+				{
+					AreaImpl newNode1 = new AreaImpl(0,0,0,0);
+					AreaImpl newNode2 = new AreaImpl(0,0,0,0);
+					newNode1.addBox(root.getBoxes().get(0));
+					newNode2.addBox(root.getBoxes().get(0));
+					List<Area> selected1 = new ArrayList<Area>();
+					List<Area> selected2 = new ArrayList<Area>();
+					
+					for (int j = 0; j < root.getChildCount(); j++)
+					{
+						if(j < i)
+							selected1.add(root.getChildArea(j));
+						else
+							selected2.add(root.getChildArea(j));
+					}
+					
+					for (Area subArea : selected1)
+					{
+						newNode1.appendChild(subArea);
+					}
+					for (Area subArea : selected2)
+					{
+						newNode2.appendChild(subArea);
+					}
+					
+					updateBounds(newNode1);
+					updateBounds(newNode2);
+					
+					root.appendChild(newNode1);
+					root.appendChild(newNode2);
+					
+					collectActualSeparators(root);
+					
+					createNewVisualBlock(newNode1);
+					createNewVisualBlock(newNode2);
+					reconfigureSeparators(root);
+					
+					return true;
+				}
+			}
+		}
+    	return false;
+	}
+    
+    private boolean isMetImprovedVipsRule2(AreaImpl root)
+    {
+		/*
+		  	If the first child of the node has bigger font size than the remaining children,
+		  	divide node into two blocks, one in which is the first child with bigger font size, and the other
+			contains remaining children.
+		 */
+    	
+    	Area firstChild = null;
+    	Area child = null;
+    	Boolean ruleIsMet = true;
+    	List<Area> selected = new ArrayList<Area>();
+    	
+    	if(root.getChildCount() <= 1)
+    		return false;
+    	
+    	for (int i = 0; i < root.getChildCount(); i++)
+    	{
+    		child = root.getChildArea(i);
+    		
+    		if(i == 0)
+    			firstChild = child;
+    		else
+    		{
+    			if(firstChild.getFontSize() <= child.getFontSize())
+    				ruleIsMet = false;
+    			
+    			selected.add(child);
+			}
+    	}
+    	
+    	if(ruleIsMet)
+    	{
+    		AreaImpl newNode = new AreaImpl(0,0,0,0);
+    		newNode.addBox(root.getBoxes().get(0));
+    		
+    		for (Area subArea : selected)
+			{
+				newNode.appendChild(subArea);
+			}
+    		
+    		updateBounds(newNode);
+    		
+    		root.appendChild(newNode);
+    		collectActualSeparators(root);
+    		
+    		createNewVisualBlock(newNode);
+    		reconfigureSeparators(root);
+    		printCreatedSubtree((AreaImpl)root.getParentArea(), 0);
+    		return true;
+    	}
+    	return false;
+	}
     
     private boolean isInlineNode(AreaImpl root)
     {
