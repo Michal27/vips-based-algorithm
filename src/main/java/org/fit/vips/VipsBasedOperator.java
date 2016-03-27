@@ -12,11 +12,9 @@ import org.fit.layout.model.Box;
 import org.fit.layout.model.Rectangular;
 import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.Separator;
-import org.openrdf.query.algebra.Join;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.joestelmach.natty.generated.DateParser_NumericRules.int_00_to_23_optional_prefix_return;
 
 public class VipsBasedOperator extends BaseOperator
 {
@@ -456,7 +454,7 @@ public class VipsBasedOperator extends BaseOperator
 
 	private float docEvaluation(AreaImpl root) {
     	//TODO: DoC evaluation of visualBlock
-		return 0;
+		return 0.1f;
 	}
 
 	private float nonDividableNodeDocEvaluation(AreaImpl root) {
@@ -481,8 +479,6 @@ public class VipsBasedOperator extends BaseOperator
     
     private boolean isVisualBlock(AreaImpl root)
     {
-    	//TODO: apply advanced heuristic rules to root
-    	
     	String tagName = null;
     	if(root.getBoxes().size() != 0)
     		tagName = root.getBoxes().get(0).getTagName();
@@ -537,6 +533,11 @@ public class VipsBasedOperator extends BaseOperator
     	}
     	else if(isMetVipsRule2(root))
     		return false;
+    	else if(isMetImprovedVipsRule3(root))
+    	{
+    		isNotValidNode = true;
+    		return false;
+    	}
     	else if(isMetVipsRule3(root))
 			return false;
     	else if(isMetVipsRule7(root))
@@ -548,8 +549,8 @@ public class VipsBasedOperator extends BaseOperator
     	else
     		return false;
 	}
-    
-    private boolean isVisualTr(AreaImpl root)
+
+	private boolean isVisualTr(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
     	{
@@ -712,51 +713,6 @@ public class VipsBasedOperator extends BaseOperator
     	return false;
     }
     
-    private boolean isTextNode(Area node)
-	{
-		if(node.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
-			return true;
-		else
-			return false;
-	}
-
-	private boolean isVirtualTextNode(Area node)
-	{
-		for (Area child : node.getChildAreas())
-		{	
-			//if child is not a text node
-			if(!isTextNode(child))
-			{
-				//all child nodes of child must be text nodes
-				for (Area grandChild : child.getChildAreas())
-				{
-					//if grandChild is not text node
-					if(!isTextNode(grandChild))
-					{
-						/*//if grandChild is the only child node of child
-						if(child.getChildCount() == 1)
-						{
-							//and if grandChild and child have the same coordinates
-							if(child.getX1() == grandChild.getX1() && child.getX2() == grandChild.getX2() && child.getY1() == grandChild.getY1() && child.getY2() == grandChild.getY2())
-							{
-								//proceed grandChild's child nodes instead of child's child nodes
-								for (Area grandGrandChild : grandChild.getChildAreas())
-								{
-									if(!isTextNode(grandGrandChild))
-										return false;
-								}
-							}
-							else return false;
-						}
-						else return false;*/
-						return false;
-					}
-				}
-			}
-		}
-		return true;
-	}
-    
     private boolean isMetVipsRule4(AreaImpl root)
     {	
     	/* 	
@@ -804,7 +760,6 @@ public class VipsBasedOperator extends BaseOperator
     	
     	if(proceedImprovedVipsRules)
     	{
-    		System.out.println("");System.out.println("TADYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY");System.out.println("");
     		if(isMetImprovedVipsRule1(root))
     		{
         		isNotValidNode = true;
@@ -841,7 +796,11 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isMetVipsRule6(AreaImpl root)
     {
     	/*	
+    	 	Original VIPS rule:
     	 	If one of the child nodes of the DOM node has HTML tag <HR>, then divide this DOM node.
+    	 	Improved VIPS rule:
+    	 	If a node contains a child whose tag is HR, BR or any of line-break nodes which
+			has no valid children, then divide this DOM node.
     	 */
 		if(printRules)
 			System.out.println("Processing VIPS Rule 6: " + root.toString());
@@ -851,10 +810,29 @@ public class VipsBasedOperator extends BaseOperator
     	for (Area child : root.getChildAreas())
     	{
     		childBox = child.getBoxes().get(0);
-    		if(childBox.getTagName() != null && childBox.getTagName().equals("hr"))
-    			return true;
+    		if(childBox.getTagName() != null)
+    		{
+    			if(childBox.getTagName().equals("hr"))
+        			return true;
+        		else if(childBox.getTagName().equals("br"))
+        			return true;
+        		else if(isLineBreakNode((AreaImpl)child))
+        		{
+        			if(child.getChildCount() == 0)
+        				return true;
+        			else
+        			{
+						for (Area grandChild : child.getChildAreas())
+						{
+							//if grandChild is valid
+							if(!isMetVipsRule1((AreaImpl)grandChild))
+								return false;
+						}
+						return true;
+					}
+        		}
+    		}
 		}
-    	
     	return false;
     }
     
@@ -1105,12 +1083,72 @@ public class VipsBasedOperator extends BaseOperator
     		root.appendChild(newNode);
     		collectActualSeparators(root);
     		
+    		createNewVisualBlock((AreaImpl)firstChild);
     		createNewVisualBlock(newNode);
+    		
     		reconfigureSeparators(root);
-    		printCreatedSubtree((AreaImpl)root.getParentArea(), 0);
+
     		return true;
     	}
     	return false;
+	}
+    
+    private boolean isMetImprovedVipsRule3(AreaImpl root)
+    {
+    	/*
+		  	If node is a table and some of its columns have different background color than the
+			others, divide the table into the number saparate columns and construct a visual block for each piece.
+		 */
+		Area child = null;
+		
+		for (int i = 0; i < root.getChildCount(); i++)
+		{
+			child = root.getChildArea(i);
+			
+			//TODO: Implement table columns background color checking and splitting.
+			
+			/*if(child.getFontSize() > child.getPreviousSibling().getFontSize())
+			{
+				AreaImpl newNode1 = new AreaImpl(0,0,0,0);
+				AreaImpl newNode2 = new AreaImpl(0,0,0,0);
+				newNode1.addBox(root.getBoxes().get(0));
+				newNode2.addBox(root.getBoxes().get(0));
+				List<Area> selected1 = new ArrayList<Area>();
+				List<Area> selected2 = new ArrayList<Area>();
+				
+				for (int j = 0; j < root.getChildCount(); j++)
+				{
+					if(j < i)
+						selected1.add(root.getChildArea(j));
+					else
+						selected2.add(root.getChildArea(j));
+				}
+				
+				for (Area subArea : selected1)
+				{
+					newNode1.appendChild(subArea);
+				}
+				for (Area subArea : selected2)
+				{
+					newNode2.appendChild(subArea);
+				}
+				
+				updateBounds(newNode1);
+				updateBounds(newNode2);
+				
+				root.appendChild(newNode1);
+				root.appendChild(newNode2);
+				
+				collectActualSeparators(root);
+				
+				createNewVisualBlock(newNode1);
+				createNewVisualBlock(newNode2);
+				reconfigureSeparators(root);
+				
+				return true;
+			}*/
+		}
+		return false;
 	}
     
     private boolean isInlineNode(AreaImpl root)
@@ -1128,6 +1166,52 @@ public class VipsBasedOperator extends BaseOperator
     	else
 			return false;
     }
+    
+    private boolean isTextNode(Area node)
+	{
+    	Box box = node.getBoxes().get(0);
+		if(box.getType() == Box.Type.TEXT_CONTENT)
+		{
+			if((node.getText().trim().isEmpty()) || (Float.compare(node.getFontSize(), 0.0f) == 0))
+				return false;
+			else
+				return true;
+		}
+		else
+			return false;
+	}
+
+	private boolean isVirtualTextNode(Area node)
+	{
+		if(node.getChildCount() > 0)
+		{
+			for (Area child : node.getChildAreas())
+			{	
+				//if child is not a text node
+				if(!isTextNode(child))
+				{
+					if(child.getChildCount() > 0)
+					{
+						//all child nodes of child must be text nodes
+						for (Area grandChild : child.getChildAreas())
+						{
+							//if grandChild is not text node
+							if(!isTextNode(grandChild))
+							{
+								return false;
+							}
+						}
+					}
+					else
+						return false;
+				}
+			}
+		}
+		else
+			return false;
+		
+		return true;
+	}
     
     private boolean isLineBreakNode(AreaImpl root)
     {
@@ -1253,7 +1337,7 @@ public class VipsBasedOperator extends BaseOperator
 			{
 				if(root == visualBlock.getArea())
 				{				
-					if(Float.compare(visualBlock.getDoc(), pdocValue) < 0)
+					if(Float.compare(visualBlock.getDoc(), pdocValue) <= 0)
 					{
 						for (Area child : visualBlock.getDomNode().getChildAreas())
 						{
