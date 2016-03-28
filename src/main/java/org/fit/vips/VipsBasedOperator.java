@@ -1,5 +1,6 @@
 package org.fit.vips;
 
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -33,7 +34,7 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isNotValidNode = false;
     private boolean docValueIsKnown = false;
     private float docValue = 0;
-    private boolean printRules = false;
+    private boolean printRules = true;
     
     public VipsBasedOperator()
     {
@@ -535,6 +536,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	else if(isMetImprovedVipsRule3(root))
     	{
+    		if(printRules)
+    			System.out.println("IMPROVED VIPS RULE 3 MATCH!");
     		isNotValidNode = true;
     		return false;
     	}
@@ -1093,61 +1096,138 @@ public class VipsBasedOperator extends BaseOperator
     	return false;
 	}
     
-    private boolean isMetImprovedVipsRule3(AreaImpl root)
+    private boolean isMetImprovedVipsRule3(AreaImpl root) //TODO: Check areaImpl.getBackgroundColor() in other usages
     {
     	/*
 		  	If node is a table and some of its columns have different background color than the
-			others, divide the table into the number saparate columns and construct a visual block for each piece.
+			others, divide the table into the number separate columns and construct a visual block for each piece.
 		 */
-		Area child = null;
+		AreaImpl row = null;
+		AreaImpl firstRow = null;
+		AreaImpl cell = null;
+		AreaImpl newNode = null;
+		Boolean differentColumns = false;
+		Boolean divideTable = false;
+		Boolean firstIsHead = false;
+		List<AreaImpl> rows = new ArrayList<AreaImpl>();
+		List<Color> completedColumns = new ArrayList<Color>();
+		Color firstColor = null;
 		
-		for (int i = 0; i < root.getChildCount(); i++)
+		if(root.getChildArea(0) != null && root.getChildArea(0).getBoxes().get(0) != null && root.getChildArea(0).getBoxes().get(0).getTagName() != null)
 		{
-			child = root.getChildArea(i);
-			
-			//TODO: Implement table columns background color checking and splitting.
-			
-			/*if(child.getFontSize() > child.getPreviousSibling().getFontSize())
+			if(root.getChildArea(0).getBoxes().get(0).getTagName().equals("thead") && root.getChildArea(0).getChildArea(0) != null)
 			{
-				AreaImpl newNode1 = new AreaImpl(0,0,0,0);
-				AreaImpl newNode2 = new AreaImpl(0,0,0,0);
-				newNode1.addBox(root.getBoxes().get(0));
-				newNode2.addBox(root.getBoxes().get(0));
-				List<Area> selected1 = new ArrayList<Area>();
-				List<Area> selected2 = new ArrayList<Area>();
-				
-				for (int j = 0; j < root.getChildCount(); j++)
-				{
-					if(j < i)
-						selected1.add(root.getChildArea(j));
-					else
-						selected2.add(root.getChildArea(j));
-				}
-				
-				for (Area subArea : selected1)
-				{
-					newNode1.appendChild(subArea);
-				}
-				for (Area subArea : selected2)
-				{
-					newNode2.appendChild(subArea);
-				}
-				
-				updateBounds(newNode1);
-				updateBounds(newNode2);
-				
-				root.appendChild(newNode1);
-				root.appendChild(newNode2);
-				
-				collectActualSeparators(root);
-				
-				createNewVisualBlock(newNode1);
-				createNewVisualBlock(newNode2);
-				reconfigureSeparators(root);
-				
-				return true;
-			}*/
+				firstRow = (AreaImpl)root.getChildArea(0).getChildArea(0);
+				firstIsHead = true;
+			}
+			else if(root.getChildArea(0).getBoxes().get(0).getTagName().equals("thead") && root.getChildArea(0).getChildArea(0) != null)
+			{
+				firstRow = (AreaImpl)root.getChildArea(0).getChildArea(0);
+			}
+			else
+				return false;
 		}
+		
+		for (int i = 0; i < firstRow.getChildCount(); i++)
+		{
+			cell = (AreaImpl)firstRow.getChildArea(i);
+			
+			if(cell.getNextSibling() != null)
+				if(!cell.hasSameBackground((AreaImpl)cell.getNextSibling()))
+					differentColumns = true;
+		}
+			
+		if(differentColumns)
+		{		
+			for (Area tr : root.getChildArea(0).getChildAreas())
+			{
+				rows.add((AreaImpl)tr);
+			}
+			if(firstIsHead)
+				if(root.getChildArea(1) != null)
+					for (Area tr : root.getChildArea(1).getChildAreas())
+					{
+						rows.add((AreaImpl)tr);
+					}
+			
+			for (int i = 0; i < firstRow.getChildCount(); i++)
+			{
+				for (int j = 0; j < rows.size(); j++)
+				{
+					row = rows.get(j);
+					cell = (AreaImpl)row.getChildArea(i);
+					
+					if(row.getNextSibling() != null && row.getNextSibling().getChildArea(i) != null)
+					{
+						if(!cell.hasSameBackground((AreaImpl)row.getNextSibling().getChildArea(i)))
+							break;
+					}
+					else
+					{
+						completedColumns.add(cell.getBackgroundColor());
+						break;
+					}
+				}
+			}
+			
+			for (Color color : completedColumns)
+			{
+				if(color == completedColumns.get(0))
+					firstColor = color;
+				else
+				{
+					if(!color.equals(firstColor))
+					{
+						divideTable = true;
+						break;
+					}
+				}
+			}
+			if(divideTable)
+			{
+				List<AreaImpl> column = null;
+				List<List<AreaImpl>> columns = new ArrayList<List<AreaImpl>>();
+				for (int i = 0; i < firstRow.getChildCount(); i++)
+				{
+					column = new ArrayList<AreaImpl>();
+					for (int j = 0; j < rows.size(); j++)
+					{
+						row = rows.get(j);
+						column.add((AreaImpl)row.getChildArea(i));
+					}
+					columns.add(column);
+				}
+				
+				List<AreaImpl> newNodes = new ArrayList<AreaImpl>();
+				for (List<AreaImpl> col : columns)
+				{
+						newNode = new AreaImpl(0,0,0,0);
+			    		newNode.addBox(root.getBoxes().get(0));
+			    		
+			    		for (AreaImpl subArea : col)
+						{
+							newNode.appendChild(subArea);
+						}
+			    		
+			    		updateBounds(newNode);
+			    		
+			    		newNodes.add(newNode);
+			    		collectActualSeparators(newNode);
+				}
+				
+				root.removeAllChildren();
+				for (AreaImpl col : newNodes)
+				{
+					root.appendChild(col);
+					createNewVisualBlock(col);
+				}
+				
+	    		collectActualSeparators(root);
+	    		reconfigureSeparators(root);
+
+	    		return true;
+			}
+		}	
 		return false;
 	}
     
