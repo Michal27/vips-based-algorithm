@@ -2,9 +2,12 @@ package org.fit.vips;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.fit.layout.impl.BaseOperator;
 import org.fit.layout.model.Area;
@@ -34,7 +37,7 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isNotValidNode = false;
     private boolean docValueIsKnown = false;
     private float docValue = 0;
-    private boolean printRules = true;
+    private boolean printRules = false;
     
     public VipsBasedOperator()
     {
@@ -441,26 +444,151 @@ public class VipsBasedOperator extends BaseOperator
 			{
 				if(nonDividableNode == root)
 				{
-					visualBlock.setDoc(nonDividableNodeDocEvaluation(root));
+					visualBlock.setDoc(docEvaluation(root, 0.6f, 0.8f));
 					visualBlocksPool.add(visualBlock);
 					return;
 				}
 			}
 			
-			visualBlock.setDoc(docEvaluation(root));
+			visualBlock.setDoc(docEvaluation(root, 0f, 1f));
 		}
-		
+
 		visualBlocksPool.add(visualBlock); //add visual block to pool
 	}
 
-	private float docEvaluation(AreaImpl root) {
-    	//TODO: DoC evaluation of visualBlock
-		return 0.1f;
+	private float docEvaluation(AreaImpl root, float min, float max) {
+		float doc = max;
+		int frequency = 0;
+		int maxFrequency = 0;
+		
+    	List<AreaImpl> leafNodes = collectLeafNodes(root);
+    	
+    	List<Float> fontSizes = new ArrayList<Float>();
+    	List<Float> fontWeights = new ArrayList<Float>();
+    	List<Float> fontStyles = new ArrayList<Float>();
+    	List<Float> underLines = new ArrayList<Float>();
+    	List<Float> lineThroughs = new ArrayList<Float>();
+    	List<Color> backgoundColors = new ArrayList<Color>();
+    	
+    	float primaryFontSize = 0;
+    	float primaryFontWeight = 0;
+    	float primaryFontStyle = 0;
+    	float primaryUnderLine = 0;
+    	float primaryLineThrough = 0;
+    	Color primaryColor = null;
+    	
+    	for (AreaImpl leafNode : leafNodes)
+    	{
+			fontSizes.add(leafNode.getFontSize());
+			fontWeights.add(leafNode.getFontWeight());
+			fontStyles.add(leafNode.getFontStyle());
+			underLines.add(leafNode.getUnderline());
+			lineThroughs.add(leafNode.getLineThrough());
+			if(leafNode.getBackgroundColor() != null)
+				backgoundColors.add(leafNode.getBackgroundColor());
+		}
+    	
+    	Set<Float> fontSizesSet = new HashSet<Float>(fontSizes);
+    	Set<Float> fontWeightsSet = new HashSet<Float>(fontWeights);
+    	Set<Float> fontStylesSet = new HashSet<Float>(fontStyles);
+    	Set<Float> underLinesSet = new HashSet<Float>(underLines);
+    	Set<Float> lineThroughsSet = new HashSet<Float>(lineThroughs);
+    	Set<Color> backgoundColorsSet = new HashSet<Color>(backgoundColors);
+    	
+    	for (Float key : fontSizesSet)
+    	{
+    		frequency = Collections.frequency(fontSizes, key);
+			if(frequency > maxFrequency)
+			{
+				maxFrequency = frequency;
+				primaryFontSize = key;
+			}
+		}
+    	maxFrequency = 0;
+    	for (Float key : fontWeightsSet)
+    	{
+    		frequency = Collections.frequency(fontWeights, key);
+			if(frequency > maxFrequency)
+			{
+				maxFrequency = frequency;
+				primaryFontWeight = key;
+			}
+		}
+    	maxFrequency = 0;
+    	for (Float key : fontStylesSet)
+    	{
+    		frequency = Collections.frequency(fontStyles, key);
+			if(frequency > maxFrequency)
+			{
+				maxFrequency = frequency;
+				primaryFontStyle = key;
+			}
+		}
+    	maxFrequency = 0;
+    	for (Float key : underLinesSet)
+    	{
+    		frequency = Collections.frequency(underLines, key);
+			if(frequency > maxFrequency)
+			{
+				maxFrequency = frequency;
+				primaryUnderLine = key;
+			}
+		}
+    	maxFrequency = 0;
+    	for (Float key : lineThroughsSet)
+    	{
+    		frequency = Collections.frequency(lineThroughs, key);
+			if(frequency > maxFrequency)
+			{
+				maxFrequency = frequency;
+				primaryLineThrough = key;
+			}
+		}
+    	maxFrequency = 0;
+    	for (Color key : backgoundColorsSet)
+    	{
+    		frequency = Collections.frequency(backgoundColors, key);
+			if(frequency > maxFrequency)
+			{
+				maxFrequency = frequency;
+				primaryColor = key;
+			}
+		}
+    	
+    	for (AreaImpl leafNode : leafNodes)
+    	{
+			if(Float.compare(primaryFontSize, leafNode.getFontSize()) != 0)
+				doc -= 0.05f;
+			if(Float.compare(primaryFontWeight, leafNode.getFontWeight()) != 0)
+				doc -= 0.05f;
+			if(Float.compare(primaryFontStyle, leafNode.getFontStyle()) != 0)
+				doc -= 0.05f;
+			if(Float.compare(primaryUnderLine, leafNode.getUnderline()) != 0)
+				doc -= 0.05f;
+			if(Float.compare(primaryLineThrough, leafNode.getLineThrough()) != 0)
+				doc -= 0.05f;
+			if((leafNode.getBackgroundColor()) != null && (!primaryColor.equals(leafNode.getBackgroundColor())))
+				doc -= 0.1f;
+			if(Float.compare(doc, min) <= 0)
+				return min;
+		}
+    	
+		return doc;
 	}
 
-	private float nonDividableNodeDocEvaluation(AreaImpl root) {
-		// TODO evaluate Doc of NonDividableBlock (Vips rule 7)
-		return 0;
+	private List<AreaImpl> collectLeafNodes(AreaImpl root)
+	{
+		List<AreaImpl> result = new ArrayList<AreaImpl>();
+		
+		if(root.getChildCount() == 0)
+			result.add(root);
+		else
+		{
+			for (Area child : root.getChildAreas()) 
+				result.addAll(collectLeafNodes((AreaImpl)child));
+		}
+		
+		return result;
 	}
 
 	private boolean dividable(AreaImpl root, int currentLevel)
@@ -844,8 +972,7 @@ public class VipsBasedOperator extends BaseOperator
     	/*	
     	 	If the background color of this node is different from one of its children’s, divide this node and at the 
 			same time, the child node with different background color will not be divided in this round.  
-			Set the DoC value (0.6 - 0.8) for the child node based on the html tag of the child node and the size of the 
-			child node. 
+			Set the DoC value (0.6 - 0.8) for the child node. 
     	 */
 		if(printRules)
 			System.out.println("Processing VIPS Rule 7: " + root.toString());
@@ -872,15 +999,12 @@ public class VipsBasedOperator extends BaseOperator
     	/* 	
 			If  the  node  has  at  least  one  text  node  child  or  at  least  one  virtual  text  node  child,  and  the  node's  
 			relative size is smaller than a threshold, then the node cannot be divided. 
-			Set the DoC value (from 0.5 - 0.8) based on the html tag of the node.
+			Set the DoC value from 0.5 to 0.8.
 		*/
 		if(printRules)
 			System.out.println("Processing VIPS Rule 8: " + root.toString());
     	
     	boolean isVirtual = true;
-    	//TODO: Implement DoC eval
-    	docValue = 0.5f;
-    	docValueIsKnown = true;
     	
     	for (Area child : root.getChildAreas())
     	{
@@ -888,6 +1012,8 @@ public class VipsBasedOperator extends BaseOperator
 			if(child.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
 			{
 				//TODO: implement threshold evaluation
+				//docValue = docEvaluation(root, 0.8f, 0.5f);
+		    	//docValueIsKnown = true;
 				//return true;
 			}
 			//if child node is a virtual text node
@@ -901,6 +1027,8 @@ public class VipsBasedOperator extends BaseOperator
 				if(isVirtual)
 				{
 					//TODO: implement threshold evaluation
+					//docValue = docEvaluation(root, 0.8f, 0.5f);
+			    	//docValueIsKnown = true;
 					//return true;
 				}
 			}
@@ -912,8 +1040,7 @@ public class VipsBasedOperator extends BaseOperator
     private boolean isMetVipsRule9(AreaImpl root)
     {	
     	/* 	
-			If the child of the node with maximum size is smaller than a threshold (relative size), do not divide this node. 
-			Set the DoC based on the html tag and size of this node.
+			If the child of the node with maximum size is smaller than a threshold (relative size), do not divide this node.
 		*/
 		if(printRules)
 			System.out.println("Processing VIPS Rule 9: " + root.toString());
@@ -936,7 +1063,6 @@ public class VipsBasedOperator extends BaseOperator
 		}
     	
     	//TODO:Threshold of root.getChildArea(i)
-    	//TODO:Implement DoC evaluation
     	return false;
     }
     
@@ -969,13 +1095,10 @@ public class VipsBasedOperator extends BaseOperator
     {	
     	/* 	
 			Do not divide this node.
-			Set the DoC value based on the html tag and size of this node.
 		*/
 		if(printRules)
 			System.out.println("Processing VIPS Rule 12: " + root.toString());
-    	
-    	//TODO: set Doc
-    	
+
     	return true;
     }
     
@@ -1406,13 +1529,13 @@ public class VipsBasedOperator extends BaseOperator
     {
     	if(root.getChildCount() != 0)
     	{
-    		//System.out.println("This is NOT Leaf node:" + root.toString());
+    		//Non-leaf node
     		for (int i = 0; i < root.getChildCount(); i++)
     			processLeafNodes((AreaImpl) root.getChildArea(i));
     	}
     	else
     	{
-    		//System.out.println("This is Leaf node:" + root.toString());
+    		//Leaf node
 			for (VipsBasedVisualBlock visualBlock : visualBlocksPool)
 			{
 				if(root == visualBlock.getArea())
