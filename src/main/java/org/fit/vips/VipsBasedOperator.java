@@ -2,7 +2,6 @@ package org.fit.vips;
 
 import java.awt.Color;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -38,8 +37,10 @@ public class VipsBasedOperator extends BaseOperator
     private boolean docValueIsKnown = false;
     private float docValue = 0;
     private boolean printRules = false;
-    
-    public VipsBasedOperator()
+    private AreaImpl pageRootAreaImpl = null;
+    private int pageThreshold = 1; //percentage threshold value (1% of pageDimension is default)
+
+	public VipsBasedOperator()
     {
     	pdocValue = maxPdocValue;
     }
@@ -64,7 +65,7 @@ public class VipsBasedOperator extends BaseOperator
     @Override
     public String getDescription()
     {
-        return "..."; //TODO
+        return "Operator based on Visual Page Segmentation Algorithm.";
     }
 
     @Override
@@ -86,11 +87,38 @@ public class VipsBasedOperator extends BaseOperator
 
     public void setPdocValue(float pdocValue)
     {
-        this.pdocValue = pdocValue;
+    	if((Float.compare(pdocValue, 0) >= 0) && (Float.compare(pdocValue, 1) <= 0))
+    		this.pdocValue = pdocValue;
     }
     
-    public List<VipsBasedVisualBlock> getVisualBlocksPool() {
+    public List<VipsBasedVisualBlock> getVisualBlocksPool()
+    {
 		return visualBlocksPool;
+	}
+    
+    public List<VipsBasedSeparator> getDetectedSeparators()
+    {
+		return detectedSeparators;
+	}
+    
+    public int getPageThreshold()
+    {
+		return pageThreshold;
+	}
+
+	public void setPageThreshold(int pageThreshold)
+	{
+		this.pageThreshold = pageThreshold;
+	}
+
+	public AreaImpl getPageRoot()
+    {
+		return pageRootAreaImpl;
+	}
+
+	public void setPageRoot(AreaImpl pageRootAreaImpl)
+	{
+		this.pageRootAreaImpl = pageRootAreaImpl;
 	}
     
     //----------------------------------------------------
@@ -98,12 +126,14 @@ public class VipsBasedOperator extends BaseOperator
     @Override
     public void apply(AreaTree atree)
     {
+    	setPageRoot((AreaImpl)atree.getRoot());
         performVipsAlgorithm((AreaImpl) atree.getRoot());
     }
 
     @Override
     public void apply(AreaTree atree, Area root)
     {	
+    	setPageRoot((AreaImpl) root);
     	performVipsAlgorithm((AreaImpl) root);
     }
     
@@ -434,7 +464,7 @@ public class VipsBasedOperator extends BaseOperator
 		
 		if(docValueIsKnown)
 		{
-			visualBlock.setDoc(docValue);
+			visualBlock.setDoc(docValue);//System.out.println("DoC KNOWN!");
 			docValueIsKnown = false;
 		}
 		else
@@ -452,7 +482,10 @@ public class VipsBasedOperator extends BaseOperator
 			
 			visualBlock.setDoc(docEvaluation(root, 0f, 1f));
 		}
-
+		/*System.out.println(root.toString());
+		double dim = (root.getWidth()*root.getHeight()*100) / (getPageRoot().getWidth()*getPageRoot().getHeight());
+		System.out.println("Percentage dimension: " + dim);
+		System.out.println("DoC value: " + visualBlock.getDoc());*/
 		visualBlocksPool.add(visualBlock); //add visual block to pool
 	}
 
@@ -461,7 +494,7 @@ public class VipsBasedOperator extends BaseOperator
 		int frequency = 0;
 		int maxFrequency = 0;
 		
-    	List<AreaImpl> leafNodes = collectLeafNodes(root);
+    	List<AreaImpl> leafNodes = collectLeafNodes(root);//System.out.println("Child count: " + leafNodes.size());
     	
     	List<Float> fontSizes = new ArrayList<Float>();
     	List<Float> fontWeights = new ArrayList<Float>();
@@ -484,8 +517,7 @@ public class VipsBasedOperator extends BaseOperator
 			fontStyles.add(leafNode.getFontStyle());
 			underLines.add(leafNode.getUnderline());
 			lineThroughs.add(leafNode.getLineThrough());
-			if(leafNode.getBackgroundColor() != null)
-				backgoundColors.add(leafNode.getBackgroundColor());
+			backgoundColors.add(leafNode.getBackgroundColor());
 		}
     	
     	Set<Float> fontSizesSet = new HashSet<Float>(fontSizes);
@@ -558,17 +590,23 @@ public class VipsBasedOperator extends BaseOperator
     	for (AreaImpl leafNode : leafNodes)
     	{
 			if(Float.compare(primaryFontSize, leafNode.getFontSize()) != 0)
-				doc -= 0.05f;
-			if(Float.compare(primaryFontWeight, leafNode.getFontWeight()) != 0)
-				doc -= 0.05f;
-			if(Float.compare(primaryFontStyle, leafNode.getFontStyle()) != 0)
-				doc -= 0.05f;
-			if(Float.compare(primaryUnderLine, leafNode.getUnderline()) != 0)
-				doc -= 0.05f;
-			if(Float.compare(primaryLineThrough, leafNode.getLineThrough()) != 0)
-				doc -= 0.05f;
-			if((leafNode.getBackgroundColor()) != null && (!primaryColor.equals(leafNode.getBackgroundColor())))
 				doc -= 0.1f;
+			if(Float.compare(primaryFontWeight, leafNode.getFontWeight()) != 0)
+				doc -= 0.1f;
+			if(Float.compare(primaryFontStyle, leafNode.getFontStyle()) != 0)
+				doc -= 0.1f;
+			if(Float.compare(primaryUnderLine, leafNode.getUnderline()) != 0)
+				doc -= 0.1f;
+			if(Float.compare(primaryLineThrough, leafNode.getLineThrough()) != 0)
+				doc -= 0.1f;
+			if((leafNode.getBackgroundColor()) != null && (primaryColor != null))
+			{
+				if(!primaryColor.equals(leafNode.getBackgroundColor()))
+					doc -= 0.25f;
+			}
+			else if((leafNode.getBackgroundColor() == null && primaryColor != null) || (leafNode.getBackgroundColor() != null && primaryColor == null))
+				doc -= 0.25f;
+			
 			if(Float.compare(doc, min) <= 0)
 				return min;
 		}
@@ -829,8 +867,7 @@ public class VipsBasedOperator extends BaseOperator
 		return false;
     }
     
-    //TODO: is this rule really needed? Is it possible to know root node of some block? Isn't it a nonsense?
-    //TODO: check this
+    //TODO: removed rule
     private boolean isMetVipsRule3(AreaImpl root)
     {
     	/*	
@@ -981,7 +1018,15 @@ public class VipsBasedOperator extends BaseOperator
     	
     	for (Area child : root.getChildAreas())
     	{
-    		if(child.getBackgroundColor() != root.getBackgroundColor())
+    		if(child.getBackgroundColor() != null && root.getBackgroundColor() != null)
+    		{
+    			if(!child.getBackgroundColor().equals(root.getBackgroundColor()))
+	    		{
+	    			ruleMet = true;
+	    			nonDividableNodes.add((AreaImpl)child);
+	    		}
+    		}
+    		else if((child.getBackgroundColor() == null && root.getBackgroundColor() != null) || (child.getBackgroundColor() != null && root.getBackgroundColor() == null))
     		{
     			ruleMet = true;
     			nonDividableNodes.add((AreaImpl)child);
@@ -1004,40 +1049,23 @@ public class VipsBasedOperator extends BaseOperator
 		if(printRules)
 			System.out.println("Processing VIPS Rule 8: " + root.toString());
     	
-    	boolean isVirtual = true;
-    	
     	for (Area child : root.getChildAreas())
     	{
-    		//if child node is a text node
-			if(child.getBoxes().get(0).getType() == Box.Type.TEXT_CONTENT)
+    		//if child node is a text node or virtual text node
+			if(isTextNode(child) || isVirtualTextNode(child))
 			{
-				//TODO: implement threshold evaluation
-				//docValue = docEvaluation(root, 0.8f, 0.5f);
-		    	//docValueIsKnown = true;
-				//return true;
-			}
-			//if child node is a virtual text node
-			else
-			{
-				for (Area virtualNodeChild : child.getChildAreas())
+				if(isSmallerThanThreshold(root))
 				{
-					if(virtualNodeChild.getBoxes().get(0).getType() != Box.Type.TEXT_CONTENT)
-						isVirtual = false;
-				}
-				if(isVirtual)
-				{
-					//TODO: implement threshold evaluation
-					//docValue = docEvaluation(root, 0.8f, 0.5f);
-			    	//docValueIsKnown = true;
-					//return true;
+					docValue = docEvaluation(root, 0.8f, 0.5f);
+			    	docValueIsKnown = true;
+					return true;
 				}
 			}
 		}
-    	
     	return false;
     }
-    
-    private boolean isMetVipsRule9(AreaImpl root)
+
+	private boolean isMetVipsRule9(AreaImpl root)
     {	
     	/* 	
 			If the child of the node with maximum size is smaller than a threshold (relative size), do not divide this node.
@@ -1062,8 +1090,10 @@ public class VipsBasedOperator extends BaseOperator
     		i++;
 		}
     	
-    	//TODO:Threshold of root.getChildArea(i)
-    	return false;
+    	if(root.getChildCount() != 0 && isSmallerThanThreshold((AreaImpl)root.getChildArea(maxI)))
+    		return true;
+    	else
+    		return false;
     }
     
     private boolean isMetVipsRule10(AreaImpl root)
@@ -1219,7 +1249,7 @@ public class VipsBasedOperator extends BaseOperator
     	return false;
 	}
     
-    private boolean isMetImprovedVipsRule3(AreaImpl root) //TODO: Check areaImpl.getBackgroundColor() in other usages
+    private boolean isMetImprovedVipsRule3(AreaImpl root)
     {
     	/*
 		  	If node is a table and some of its columns have different background color than the
@@ -1299,7 +1329,15 @@ public class VipsBasedOperator extends BaseOperator
 					firstColor = color;
 				else
 				{
-					if(!color.equals(firstColor))
+					if(color != null && firstColor != null)
+					{
+						if(!color.equals(firstColor))
+						{
+							divideTable = true;
+							break;
+						}
+					}
+					else if((color == null && firstColor != null) || (color != null && firstColor == null))
 					{
 						divideTable = true;
 						break;
@@ -1352,6 +1390,19 @@ public class VipsBasedOperator extends BaseOperator
 			}
 		}	
 		return false;
+	}
+    
+    private boolean isSmallerThanThreshold(AreaImpl root)
+    {
+    	double pageDimension = getPageRoot().getWidth() * getPageRoot().getHeight();
+    	double nodeDimension = root.getWidth() * root.getHeight();
+    	double threshold = pageDimension * (this.getPageThreshold()/100);
+    	
+    	//if node dimension is smaller than threshold
+    	if(Double.compare(nodeDimension, threshold) <= 0)
+    		return true;
+    	else    	
+    		return false;
 	}
     
     private boolean isInlineNode(AreaImpl root)

@@ -25,7 +25,6 @@ public class VipsBasedSeparatorSet extends SeparatorSetHVS{
     @Override
     protected void filterSeparators()
     {
-    	
+    	//There are all separators needed in VIPS based operator, any separators is filtered out.
     }
-
 }

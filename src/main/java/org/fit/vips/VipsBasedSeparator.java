@@ -2,6 +2,7 @@ package org.fit.vips;
 
 import org.fit.layout.model.Box;
 import org.fit.layout.model.Rectangular;
+import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.Separator;
 
 public class VipsBasedSeparator extends Separator {
@@ -45,7 +46,12 @@ public class VipsBasedSeparator extends Separator {
 			result += getArea2().getFontSize()-getArea1().getFontSize();
 		
 		//If background colors of the blocks on two sides of the separator are different, the weight will be increased.
-		if(getArea1().getBackgroundColor() != getArea2().getBackgroundColor())
+		if(getArea1().getBackgroundColor() != null && getArea2().getBackgroundColor() != null)
+		{
+			if(!getArea1().getBackgroundColor().equals(getArea2().getBackgroundColor()))
+				result *= 2;
+		}
+		else if((getArea1().getBackgroundColor() == null && getArea2().getBackgroundColor() != null) || (getArea1().getBackgroundColor() != null && getArea2().getBackgroundColor() == null))
 			result *= 2;
 		
 		//If the structures of the blocks on the two sides of the separator are very similar (e.g. both are text), the weight of the separator will be decreased.
