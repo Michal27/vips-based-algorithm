@@ -1,9 +1,16 @@
+/**
+ * VipsBasedVisualBlock.java
+ */
 package org.fit.vips;
 
 import org.fit.layout.model.Area;
 import org.fit.layout.model.Box;
 import org.fit.segm.grouping.AreaImpl;
 
+/**
+ * Visual block from VIPS perspective
+ * @author Michal Malanik
+ */
 public class VipsBasedVisualBlock {
 	
 	private Box block;

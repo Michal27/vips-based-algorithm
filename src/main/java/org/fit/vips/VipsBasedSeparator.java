@@ -1,3 +1,6 @@
+/**
+ * VipsBasedSeparator.java
+ */
 package org.fit.vips;
 
 import org.fit.layout.model.Box;
@@ -5,6 +8,10 @@ import org.fit.layout.model.Rectangular;
 import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.Separator;
 
+/**
+ * Visual separator from VIPS perspective
+ * @author Michal Malanik
+ */
 public class VipsBasedSeparator extends Separator {
 	
 	public VipsBasedSeparator(short type, int x1, int y1, int x2, int y2)

@@ -4,7 +4,7 @@ import org.fit.layout.tools.BlockBrowser;
 
 /**
  * Block browser extension specific for VIPS algorithm.
- * @author xmalan01
+ * @author Michal Malanik
  */
 public class BlockBrowserVips extends BlockBrowser
 {

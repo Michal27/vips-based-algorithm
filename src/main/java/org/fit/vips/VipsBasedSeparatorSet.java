@@ -1,9 +1,16 @@
+/**
+ * VipsBasedSeparatorSet.java
+ */
 package org.fit.vips;
 
 import org.fit.layout.model.Area;
 import org.fit.segm.grouping.AreaImpl;
 import org.fit.segm.grouping.op.SeparatorSetHVS;
 
+/**
+ * Visual separator set from VIPS perspective
+ * @author Michal Malanik
+ */
 public class VipsBasedSeparatorSet extends SeparatorSetHVS{
 	
 	/**

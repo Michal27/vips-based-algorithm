@@ -1,3 +1,6 @@
+/**
+ * VipsBasedOperator.java
+ */
 package org.fit.vips;
 
 import java.awt.Color;
@@ -18,27 +21,42 @@ import org.fit.segm.grouping.op.Separator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ * Segmentation operator performing a VIPS based algorithm.
+ * @author Michal Malanik
+ */
 public class VipsBasedOperator extends BaseOperator
 {
 	private static Logger log = LoggerFactory.getLogger(VipsBasedOperator.class);
     
+	/** Predefined degree of coherence value */
     protected float pdocValue;
     protected static final int maxPdocValue = 1;
     
+    /** Input parameter */
 	protected final String[] paramNames = { "pdocValue" };
     protected final ValueType[] paramTypes = { ValueType.FLOAT };
-	
+    
+    /** Starting tree level of algorithm */
+    private static final int startLevel = 0;
+    
+    /** Actual degree of coherence value */
+    private float docValue = 0;
+    
+    /** Page root */
+    private AreaImpl pageRootAreaImpl = null;
+    
+    /** Page threshold value value */
+    private int pageThreshold = 1; //percentage threshold value (1% of pageDimension is default)
+    
+    /** Print used heuristic rules to output? */
+    private boolean printRules = false;
+    
     protected List<VipsBasedVisualBlock> visualBlocksPool = new ArrayList<VipsBasedVisualBlock>();
     protected List<VipsBasedSeparator> detectedSeparators = new ArrayList<VipsBasedSeparator>();
     private List<AreaImpl> nonDividableNodes = new ArrayList<AreaImpl>();
-    private static final int startLevel = 0;
     private boolean isNotValidNode = false;
     private boolean docValueIsKnown = false;
-    private float docValue = 0;
-    private boolean printRules = false;
-    private AreaImpl pageRootAreaImpl = null;
-    private int pageThreshold = 1; //percentage threshold value (1% of pageDimension is default)
 
 	public VipsBasedOperator()
     {
@@ -139,6 +157,10 @@ public class VipsBasedOperator extends BaseOperator
     
     //----------------------------------------------------
     
+    /**
+     * Performs all phases of segmentation process 
+     * @param root node of input AreaTree
+     */
     protected void performVipsAlgorithm(AreaImpl root)
     {
     	visualBlocksPool.clear();
@@ -161,6 +183,11 @@ public class VipsBasedOperator extends BaseOperator
     	
     }
     
+    
+    
+    /**
+     * Joining together all visual blocks on each single line of text
+     */
     private void joinLineVisualBlocks()
     {
     	AreaImpl firstArea = null;
@@ -186,6 +213,12 @@ public class VipsBasedOperator extends BaseOperator
 		
 	}
 
+    
+    
+    /**
+     * Performs a phase of content structure construction
+     * @param root node of input AreaTree
+     */
 	private void contentStructureConstruction(AreaImpl root)
     {
     	List<AreaImpl> createdSubtrees = new ArrayList<AreaImpl>();
@@ -200,9 +233,7 @@ public class VipsBasedOperator extends BaseOperator
     	VipsBasedSeparator actualSeparator = null;
     	AreaImpl newNode = null;
     	while (detectedSeparators.size() != 0)
-    	{
-			//System.out.println(detectedSeparators.size());
-    		
+    	{	
     		actualSeparator = detectedSeparators.get(0);
     		
     		if((actualSeparator.getArea1() != null) && (actualSeparator.getArea2() != null) && (actualSeparator.getArea1() != actualSeparator.getArea2()))
@@ -215,6 +246,7 @@ public class VipsBasedOperator extends BaseOperator
         		if(detectedSeparators.size() != 0)
         			detectedSeparators.remove(0);
         		
+        		//join all blocks which are siblings and are separated with same weight separator
         		List<VipsBasedSeparator> detectedSeparatorsCopy = new ArrayList<VipsBasedSeparator>(detectedSeparators);
         		//for-each separator with same weight
         		while(detectedSeparatorsCopy.size() != 0)
@@ -287,16 +319,10 @@ public class VipsBasedOperator extends BaseOperator
         			if(createdSubtrees.contains(child))
             			createdSubtrees.remove(child);
 				}
-        		
-        		/*System.out.println();
-        		System.out.println("Remaining separators:");
-        		for (VipsBasedSeparator separator : detectedSeparators) {
-        			//if(separator.getType() == Separator.VERTICAL)
-					System.out.println(separator.toString());
-				}
-        		printCreatedSubtree(newNode, 0);*/
     		}
 		}
+    	
+    	
     	
     	//append unused subtrees to final tree
     	createdSubtrees.remove(newNode);
@@ -319,6 +345,13 @@ public class VipsBasedOperator extends BaseOperator
     	processLeafNodes(root);
     }
     
+	
+	
+	/**
+     * After joining some visual blocks to new one, we need to update bounds of
+     * new created area to surround all the children
+     * @param newNode area which needs to update bounds
+     */
     private void updateBounds(AreaImpl newNode)
     {
     	for (int i = 0; i < newNode.getChildCount(); i++)
@@ -348,6 +381,15 @@ public class VipsBasedOperator extends BaseOperator
 		}
 	}
 
+    
+    
+    /**
+     * Process unused subtrees and appending them to
+     * the right place in the content structure
+     * @param root node of input AreaTree
+     * @param subtrees list of unused subtrees
+     * @return list of areas, which are direct children of root
+     */
 	private List<AreaImpl> processUnusedSubtrees(AreaImpl root, List<AreaImpl> subtrees)
     {
     	Collections.reverse(subtrees);
@@ -356,7 +398,7 @@ public class VipsBasedOperator extends BaseOperator
     	
 		for (AreaImpl subtree : subtrees)
 		{
-			lastIntersectingArea = getLastIntersectingArea(root, subtree);
+			lastIntersectingArea = getLastSurroundingArea(root, subtree);
 			if(lastIntersectingArea != null)
 				lastIntersectingArea.appendChild(subtree);
 			else
@@ -365,7 +407,16 @@ public class VipsBasedOperator extends BaseOperator
 		return result;
 	}
 
-	private AreaImpl getLastIntersectingArea(AreaImpl root, AreaImpl area)
+	
+	
+	/**
+     * Finds the last area in root, which is
+     * completely surrounding unused area
+     * @param root node of input AreaTree
+     * @param unused area
+     * @return resulting area
+     */
+	private AreaImpl getLastSurroundingArea(AreaImpl root, AreaImpl area)
 	{
 		Area child = null;
 		AreaImpl tmpResult = null;
@@ -374,7 +425,7 @@ public class VipsBasedOperator extends BaseOperator
 		for (int i = 0; i < root.getChildCount(); i++)
 		{
 			child = root.getChildArea(i);
-			if((tmpResult = getLastIntersectingArea((AreaImpl)child, area)) != null)
+			if((tmpResult = getLastSurroundingArea((AreaImpl)child, area)) != null)
 				result = tmpResult;
 		}
 		
@@ -395,6 +446,8 @@ public class VipsBasedOperator extends BaseOperator
 		}
 	}
 
+	
+	
 	private void printCreatedSubtree(AreaImpl root, int level)
     {
     	if(level == 0)
@@ -426,6 +479,13 @@ public class VipsBasedOperator extends BaseOperator
 
 	}
 
+	
+	
+	/**
+     * Performs a phase of content structure construction
+     * @param root node of input AreaTree
+     * @param currentLevel starting level of input AreaTree
+     */
 	private void divideDomTree(AreaImpl root, int currentLevel)
     {  	
     	if(dividable(root, currentLevel)) //divide this block
@@ -450,6 +510,12 @@ public class VipsBasedOperator extends BaseOperator
 		}
     }
     
+	
+	
+	/**
+     * Creates a new visual block
+     * @param root node of AreaTree, we want form to visual block
+     */
     private void createNewVisualBlock(AreaImpl root)
     {
     	VipsBasedVisualBlock visualBlock = new VipsBasedVisualBlock();
@@ -464,7 +530,7 @@ public class VipsBasedOperator extends BaseOperator
 		
 		if(docValueIsKnown)
 		{
-			visualBlock.setDoc(docValue);//System.out.println("DoC KNOWN!");
+			visualBlock.setDoc(docValue);
 			docValueIsKnown = false;
 		}
 		else
@@ -482,19 +548,25 @@ public class VipsBasedOperator extends BaseOperator
 			
 			visualBlock.setDoc(docEvaluation(root, 0f, 1f));
 		}
-		/*System.out.println(root.toString());
-		double dim = (root.getWidth()*root.getHeight()*100) / (getPageRoot().getWidth()*getPageRoot().getHeight());
-		System.out.println("Percentage dimension: " + dim);
-		System.out.println("DoC value: " + visualBlock.getDoc());*/
+		
 		visualBlocksPool.add(visualBlock); //add visual block to pool
 	}
 
+    
+    
+    /**
+     * Evaluates degree of coherence of visual block
+     * @param root input visual block
+     * @param min minimum allowed doc
+     * @param max maximum allowed doc
+     * @result degree of coherence value in given range
+     */
 	private float docEvaluation(AreaImpl root, float min, float max) {
 		float doc = max;
 		int frequency = 0;
 		int maxFrequency = 0;
 		
-    	List<AreaImpl> leafNodes = collectLeafNodes(root);//System.out.println("Child count: " + leafNodes.size());
+    	List<AreaImpl> leafNodes = collectLeafNodes(root);
     	
     	List<Float> fontSizes = new ArrayList<Float>();
     	List<Float> fontWeights = new ArrayList<Float>();
@@ -614,6 +686,8 @@ public class VipsBasedOperator extends BaseOperator
 		return doc;
 	}
 
+	
+	
 	private List<AreaImpl> collectLeafNodes(AreaImpl root)
 	{
 		List<AreaImpl> result = new ArrayList<AreaImpl>();
@@ -629,6 +703,14 @@ public class VipsBasedOperator extends BaseOperator
 		return result;
 	}
 
+	
+	
+	/**
+     * Is current node dividable?
+     * @param root input node of AreaTree
+     * @param currentLevel node's current level in AreaTree
+     * @result true if node is dividable, otherwise false
+     */
 	private boolean dividable(AreaImpl root, int currentLevel)
     {
     	if(currentLevel == startLevel) //root is the TOP block
@@ -644,6 +726,13 @@ public class VipsBasedOperator extends BaseOperator
     	}
     }
     
+	
+	
+	/**
+     * Checks, if current node forms a visual block based on heuristic rules
+     * @param root input node of AreaTree
+     * @result true if node is visual block, otherwise false
+     */
     private boolean isVisualBlock(AreaImpl root)
     {
     	String tagName = null;
@@ -664,6 +753,8 @@ public class VipsBasedOperator extends BaseOperator
     		return isVisualOther(root);
     }
 
+    
+    
 	private boolean isVisualInline(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
@@ -691,6 +782,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
 	}
     
+	
+	
     private boolean isVisualTable(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
@@ -719,6 +812,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
 	}
 
+    
+    
 	private boolean isVisualTr(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
@@ -740,6 +835,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
 	}
     
+	
+	
     private boolean isVisualTd(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
@@ -764,6 +861,8 @@ public class VipsBasedOperator extends BaseOperator
     	else
     		return false;
 	}
+    
+    
     
     private boolean isVisualP(AreaImpl root)
     {
@@ -792,6 +891,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
 	}
     
+    
+    
     private boolean isVisualOther(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
@@ -817,6 +918,12 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
 	}
 
+     //////////////////////////////////////////
+     // SECTION OF HEURISTIC RULES
+     //////////////////////////////////////////
+    
+    
+    
 	private boolean isMetVipsRule1(AreaImpl root)
     {
     	/* If the DOM node is not a valid node and it has no valid children, then this node cannot be divided and will be cut. */
@@ -846,6 +953,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     }
     
+	
+	
     private boolean isMetVipsRule2(AreaImpl root)
     {	
     	/* If the DOM node has only one valid child and the child is not a text node, then divide this node. */
@@ -867,7 +976,9 @@ public class VipsBasedOperator extends BaseOperator
 		return false;
     }
     
-    //TODO: removed rule
+    
+    
+    //removed rule
     private boolean isMetVipsRule3(AreaImpl root)
     {
     	/*	
@@ -880,6 +991,8 @@ public class VipsBasedOperator extends BaseOperator
     	
     	return false;
     }
+    
+    
     
     private boolean isMetVipsRule4(AreaImpl root)
     {	
@@ -944,6 +1057,8 @@ public class VipsBasedOperator extends BaseOperator
     	return true;
     }
     
+    
+    
     private boolean isMetVipsRule5(AreaImpl root)
     {
     	/*	
@@ -960,6 +1075,8 @@ public class VipsBasedOperator extends BaseOperator
     	
     	return false;
     }
+    
+    
     
     private boolean isMetVipsRule6(AreaImpl root)
     {
@@ -1004,6 +1121,8 @@ public class VipsBasedOperator extends BaseOperator
     	return false;
     }
     
+    
+    
     private boolean isMetVipsRule7(AreaImpl root)
     {
     	/*	
@@ -1039,6 +1158,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     }
     
+    
+    
     private boolean isMetVipsRule8(AreaImpl root)
     {	
     	/* 	
@@ -1065,6 +1186,8 @@ public class VipsBasedOperator extends BaseOperator
     	return false;
     }
 
+    
+    
 	private boolean isMetVipsRule9(AreaImpl root)
     {	
     	/* 	
@@ -1096,6 +1219,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     }
     
+	
+	
     private boolean isMetVipsRule10(AreaImpl root)
     {	
     	/* 	
@@ -1110,6 +1235,8 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     }
     
+    
+    
     private boolean isMetVipsRule11(AreaImpl root)
     {	
     	/* 	
@@ -1120,6 +1247,8 @@ public class VipsBasedOperator extends BaseOperator
     	
     	return true;
     }
+    
+    
     
     private boolean isMetVipsRule12(AreaImpl root)
     {	
@@ -1193,6 +1322,8 @@ public class VipsBasedOperator extends BaseOperator
     	return false;
 	}
     
+    
+    
     private boolean isMetImprovedVipsRule2(AreaImpl root)
     {
 		/*
@@ -1248,6 +1379,8 @@ public class VipsBasedOperator extends BaseOperator
     	}
     	return false;
 	}
+    
+    
     
     private boolean isMetImprovedVipsRule3(AreaImpl root)
     {
@@ -1392,6 +1525,17 @@ public class VipsBasedOperator extends BaseOperator
 		return false;
 	}
     
+	//////////////////////////////////////////
+	// END OF HEURISTIC RULES SECTION
+	//////////////////////////////////////////
+    
+    
+    
+    /**
+     * Check, if current node is smaller than threshold
+     * @param root current node
+     * @result true if current node is smaller than threshold, false otherwise
+     */
     private boolean isSmallerThanThreshold(AreaImpl root)
     {
     	double pageDimension = getPageRoot().getWidth() * getPageRoot().getHeight();
@@ -1405,6 +1549,13 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
 	}
     
+    
+    
+    /**
+     * Check, if current node is inline node
+     * @param root current node
+     * @result true if current node is inline node, false otherwise
+     */
     private boolean isInlineNode(AreaImpl root)
     {
     	String tagName = null;
@@ -1415,12 +1566,19 @@ public class VipsBasedOperator extends BaseOperator
     		return false;
     	
     	//if the node is a inline text element
-    	if(tagName!=null && tagName.matches("b|big|i|small|tt|abbr|acronym|cite|code|dfn|em|kbd|strong|samp|time|var|a|bdo|q|span|sub|sup|label"))
+    	if(tagName!=null && tagName.matches("b|big|i|small|tt|abbr|acronym|cite|code|dfn|em|kbd|strong|samp|time|var|a|bdo|q|span|sub|sup|label|u|s|strike|del|ins|mark|ruby"))
     		return true;
     	else
 			return false;
     }
     
+    
+    
+    /**
+     * Check, if current node is a text node
+     * @param root current node
+     * @result true if current node is a text node, false otherwise
+     */
     private boolean isTextNode(Area node)
 	{
     	Box box = node.getBoxes().get(0);
@@ -1435,6 +1593,13 @@ public class VipsBasedOperator extends BaseOperator
 			return false;
 	}
 
+    
+    
+    /**
+     * Check, if current node is a virtual text node
+     * @param root current node
+     * @result true if current node is a virtual text node, false otherwise
+     */
 	private boolean isVirtualTextNode(Area node)
 	{
 		if(node.getChildCount() > 0)
@@ -1467,11 +1632,24 @@ public class VipsBasedOperator extends BaseOperator
 		return true;
 	}
     
+	
+	
+	/**
+     * Check, if current node is a line break node
+     * @param root current node
+     * @result true if current node is a line break node, false otherwise
+     */
     private boolean isLineBreakNode(AreaImpl root)
     {
     	return !isInlineNode(root);    	
     }
     
+    
+    
+    /**
+     * Phase of visual separators detection
+     * @param root node of input AreaTree
+     */
     private void collectSeparators(AreaImpl root)
     {
     	//collecting detected separators at actual tree level
@@ -1483,6 +1661,12 @@ public class VipsBasedOperator extends BaseOperator
 		}
     }
     
+    
+    
+    /**
+     * Collects separators on actual level of tree
+     * @param root node of input AreaTree
+     */
     private void collectActualSeparators(AreaImpl root)
     {
     	VipsBasedSeparatorSet actualLevelSeparators = new VipsBasedSeparatorSet(root);
@@ -1504,6 +1688,8 @@ public class VipsBasedOperator extends BaseOperator
 		}
     }
     
+    
+    
     /**
      * Sort detected separators ascending by weight
      */
@@ -1516,6 +1702,8 @@ public class VipsBasedOperator extends BaseOperator
     	    }
     	});
     }
+    
+    
     
     /**
      * Check every detected separator if it separates only visual blocks
@@ -1553,6 +1741,12 @@ public class VipsBasedOperator extends BaseOperator
 		}
     }
     
+    
+    
+    /**
+     * Removes incorrect HSeparators
+     * @param separator checked detected separator
+     */
     private void removeIncorectHSeparator(VipsBasedSeparator separator)
     {
     	int lengthArea1 = separator.getArea1().getX2() - separator.getArea1().getX1();
@@ -1566,6 +1760,12 @@ public class VipsBasedOperator extends BaseOperator
     	}
 	}
 
+    
+    
+    /**
+     * Removing useless child nodes from detected separators surrounding areas
+     * @param root node if input AreaTree
+     */
 	private void removeAreasChildNodes(VipsBasedSeparator separator)
     {
     	AreaImpl area1 = separator.getArea1();
@@ -1576,6 +1776,14 @@ public class VipsBasedOperator extends BaseOperator
     	separator.setArea2(area2);
     }
     
+	
+	
+	/**
+     * Granularity condition check - 
+     * finds a leaf nodes and on every leaf node checks
+     * the granularity condition
+     * @param root node if input AreaTree
+     */
     private AreaImpl processLeafNodes(AreaImpl root)
     {
     	if(root.getChildCount() != 0)
@@ -1609,6 +1817,12 @@ public class VipsBasedOperator extends BaseOperator
     	return root;
     }
     
+    
+    
+    /**
+     * Reconfiguring of detected separators
+     * @param root node if input AreaTree
+     */
     private void reconfigureSeparators(AreaImpl root)
     {
     	List<VipsBasedSeparator> associatedSeparators = getAssociatedSeparators(root);
@@ -1711,6 +1925,8 @@ public class VipsBasedOperator extends BaseOperator
 		}
     }
     
+    
+    
     private List<VipsBasedSeparator> getAssociatedSeparators(AreaImpl node)
     {
     	List<VipsBasedSeparator> result = new ArrayList<VipsBasedSeparator>();
@@ -1724,28 +1940,13 @@ public class VipsBasedOperator extends BaseOperator
     	return result;
     }
     
-    /*private List<AreaImpl> getActualNodeVisualBlocks(AreaImpl root, int currentLevel)
-    {
-    	List<AreaImpl> result = new ArrayList<AreaImpl>();
-    	
-    	if(dividable(root, currentLevel)) //divide this block
-    	{ 
-    		if(!isNotValidNode)
-    		{
-    			if(currentLevel < 1)
-    				for (int i = 0; i < root.getChildCount(); i++)
-    					result.addAll(getActualNodeVisualBlocks((AreaImpl) root.getChildArea(i), currentLevel++));
-    		}
-    		else
-    			isNotValidNode = false;
-    	}
-    	else //is a visual block
-    	{ 		
-			result.add(root);
-		}
-    	return result;
-    }*/
     
+    
+    /**
+     * Check, if current node is a valid node
+     * @param root current node
+     * @result true if current node is a valid node, false otherwise
+     */
     private boolean isValidNode(AreaImpl root)
     {
     	if(isMetVipsRule1(root))
